@@ -31,7 +31,7 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .mnav{display:flex;align-items:center;justify-content:center;gap:20px;padding-bottom:10px;border-bottom:.5px solid var(--bd)}
 .mnav button{background:none;border:none;font-size:20px;color:var(--t2);padding:6px 10px;min-height:36px}
 .mnav span{font-size:16px;font-weight:600;min-width:100px;text-align:center}
-.cnt{padding:4px 16px 16px}
+.cnt{padding:4px 16px 80px}
 
 /* Stats */
 .sts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 16px}
@@ -41,7 +41,7 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 
 /* Sections */
 .sec{margin-bottom:16px}
-.sh{display:flex;justify-content:space-between;align-items:center;padding:8px 0 6px;cursor:pointer;-webkit-user-select:none;user-select:none}
+.sh{display:flex;justify-content:space-between;align-items:center;padding:12px 0;cursor:pointer;-webkit-user-select:none;user-select:none;min-height:44px}
 .sh:active{opacity:.7}
 .sh-t{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--t2)}
 .sh-v{font-size:13px;color:var(--t2);font-weight:500}
@@ -62,20 +62,21 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 
 /* Transaction log */
 .txlog{margin:8px 0 0 0;padding:8px 12px;background:var(--bg);border-radius:10px}
-.txlog-i{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:var(--t2);border-bottom:.5px solid var(--bd)}
+.txlog-i{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;color:var(--t2);border-bottom:.5px solid var(--bd);min-height:40px}
 .txlog-i:last-child{border-bottom:none}
+.txlog-i .xb{min-width:36px;min-height:36px;padding:2px}
 .txlog-i .amt{font-weight:600;color:var(--tx);min-width:44px;text-align:right}
 .txlog-i .meta{display:flex;gap:8px;flex:1;min-width:0;overflow:hidden;align-items:center}
 .txlog-i .dt{color:var(--t3);font-size:11px;flex-shrink:0}
 .txlog-i .nt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .txlog-i .tg{font-size:10px;color:var(--ac);background:rgba(34,102,204,.1);padding:1px 6px;border-radius:4px;flex-shrink:0}
-.tx-toggle{font-size:12px;color:var(--ac);cursor:pointer;margin-top:6px;display:inline-block;padding:4px 0;font-weight:500}
+.tx-toggle{font-size:13px;color:var(--ac);cursor:pointer;margin-top:4px;display:inline-flex;align-items:center;padding:10px 0;font-weight:500;min-height:44px}
 .tx-toggle:active{opacity:.6}
 
 /* Buttons */
 .add{width:100%;padding:14px;border:1.5px dashed var(--bd);border-radius:14px;background:none;color:var(--t3);font-size:14px;margin-top:4px;min-height:48px;font-weight:500}
 .add:active{background:var(--c1)}
-.xb{background:none;border:none;color:var(--t3);font-size:16px;padding:4px 6px;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center}
+.xb{background:none;border:none;color:var(--t3);font-size:16px;padding:4px 8px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center}
 .xb:active{color:var(--rd)}
 
 /* Modal */
@@ -103,7 +104,7 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .gc-s{display:flex;justify-content:space-between;font-size:12px;color:var(--t2);margin-top:6px}
 .gc-n{font-size:12px;color:var(--t2);margin-top:8px;padding:8px 10px;background:var(--bg);border-radius:8px}
 .gc-a{display:flex;gap:6px;margin-top:10px}
-.gc-a button{padding:8px 14px;border:1px solid var(--bd);border-radius:8px;background:none;color:var(--t2);font-size:12px;font-weight:500;min-height:36px}
+.gc-a button{padding:8px 14px;border:1px solid var(--bd);border-radius:8px;background:none;color:var(--t2);font-size:13px;font-weight:500;min-height:40px}
 .gc-a button:active{background:var(--bg)}
 .trophy{border:1px solid var(--bd);border-radius:14px;margin-top:14px;overflow:hidden;background:var(--c1)}
 .trophy summary{padding:12px 14px;font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;list-style:none;display:flex;justify-content:space-between}
@@ -115,7 +116,7 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 /* Charts */
 .chart-wrap{position:relative;width:100%;height:240px;margin:12px 0;background:var(--c1);border-radius:16px;padding:12px;box-shadow:var(--sh)}
 .chart-pick{display:flex;gap:6px;margin-bottom:10px}
-.chart-pick button{padding:8px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--c1);color:var(--t2);font-size:12px;font-weight:500;min-height:36px}
+.chart-pick button{padding:8px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--c1);color:var(--t2);font-size:13px;font-weight:500;min-height:40px}
 .chart-pick button.on{background:var(--tx);color:var(--bg);border-color:var(--tx)}
 
 /* Search */
@@ -168,9 +169,26 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .qa-cat:active{opacity:.7}
 .qa-cat.on{border-color:var(--ac);background:rgba(34,102,204,.08);color:var(--ac)}
 .qa-items{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:4px}
-.qa-item{padding:6px 12px;border-radius:16px;border:1px solid var(--bd);background:var(--c1);color:var(--t2);font-size:12px;font-weight:500;min-height:34px}
+.qa-item{padding:8px 14px;border-radius:16px;border:1px solid var(--bd);background:var(--c1);color:var(--t2);font-size:13px;font-weight:500;min-height:40px}
 .qa-item:active{opacity:.7}
 .qa-item.on{border-color:var(--gn);background:rgba(26,143,92,.08);color:var(--gn)}
+
+
+/* Debt planner */
+.debt-card{background:var(--c1);border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:var(--sh)}
+.debt-card .dc-top{display:flex;justify-content:space-between;align-items:center}
+.debt-card .dc-name{font-size:15px;font-weight:600}
+.debt-card .dc-bal{font-size:18px;font-weight:700;color:var(--rd);cursor:pointer;padding:4px 8px;border-radius:8px}
+.debt-card .dc-bal:active{background:var(--c2)}
+.debt-card .dc-details{display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--t2)}
+.debt-card .dc-pay{margin-top:8px;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:13px;color:var(--gn);font-weight:600}
+.debt-strat{display:flex;gap:0;border-radius:10px;overflow:hidden;border:1px solid var(--bd);margin-bottom:12px}
+.debt-strat button{flex:1;padding:8px;border:none;font-size:12px;font-weight:600;background:var(--c1);color:var(--t2);min-height:38px}
+.debt-strat button.on{background:var(--ac);color:#fff}
+.debt-summary{background:var(--c1);border-radius:14px;padding:14px 16px;margin-top:10px;box-shadow:var(--sh)}
+.debt-summary .ds-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.debt-summary .ds-label{color:var(--t2)}
+.debt-summary .ds-val{font-weight:600}
 
 /* Collapsible sections */
 .sh-arrow{font-size:12px;color:var(--t3);margin-right:4px;transition:transform .2s;display:inline-block}
@@ -212,43 +230,10 @@ function findIdxById(arr,id){return arr.findIndex(x=>x.id===id)}
 
 // ===== DEFAULT DATA =====
 const DEF={
-  template:{
-    income:[
-      {id:"i1",label:"Base pay",amount:4600,recurring:true,note:"Bi-weekly, after tax"},
-      {id:"i2",label:"Commissions",amount:1800,recurring:false,note:"Paid 15th of each month"},
-      {id:"i3",label:"Commuter benefit",amount:200,recurring:true,note:"Work transit benefit"},
-      {id:"i4",label:"GF rent contribution",amount:300,recurring:true,note:"$300-500 range"},
-    ],
-    categories:[
-      {id:"c1",name:"Fixed costs",items:[
-        {id:"f1",label:"Rent",amount:1808,recurring:true,note:"The34, net effective share"},
-        {id:"f2",label:"Loan payment",amount:700,recurring:true,note:""},
-        {id:"f3",label:"Card payment",amount:1500,recurring:false,note:"Target $1,500/mo"},
-        {id:"f4",label:"Electric + internet",amount:100,recurring:true,note:""},
-        {id:"f5",label:"Renters insurance",amount:25,recurring:true,note:""},
-      ]},
-      {id:"c2",name:"Cats",items:[
-        {id:"ct1",label:"Food + treats",amount:150,recurring:false,note:"4 cats"},
-        {id:"ct2",label:"Litter",amount:75,recurring:false,note:""},
-        {id:"ct3",label:"Vet / meds",amount:25,recurring:false,note:""},
-      ]},
-      {id:"c3",name:"Lifestyle",items:[
-        {id:"l1",label:"Groceries",amount:150,recurring:false,note:""},
-        {id:"l2",label:"Eating out + delivery",amount:150,recurring:false,note:""},
-        {id:"l3",label:"Going out",amount:250,recurring:false,note:""},
-        {id:"l4",label:"Subs + gaming",amount:75,recurring:false,note:""},
-      ]},
-      {id:"c4",name:"Savings",items:[
-        {id:"s1",label:"Emergency fund",amount:800,recurring:true,note:"Target $5k"},
-        {id:"s2",label:"Breathing room",amount:392,recurring:false,note:""},
-      ]},
-    ],
-  },
+  template:{income:[],categories:[]},
   months:{},
-  goals:{active:[
-    {id:"g1",label:"Credit card debt",type:"payoff",current:12000,target:0,start:12000,monthly:1500,created:Date.now()},
-    {id:"g2",label:"Emergency fund",type:"savings",current:0,target:5000,start:0,monthly:800,created:Date.now()},
-  ],completed:[]},
+  goals:{active:[],completed:[]},
+  debts:{cards:[],strategy:"avalanche"},
   networth:{accounts:[]},
   monthlyNotes:{},
 };
@@ -274,7 +259,7 @@ async function connect(pin){
     S.data=l?JSON.parse(l):JSON.parse(JSON.stringify(DEF));
   }
   ensureStructure();
-  S.pin=pin;localStorage.setItem("bt-pin",pin);S.phase="app";render();
+  S.pin=pin;S.phase="app";render();
 }
 
 function ensureStructure(){
@@ -285,11 +270,15 @@ function ensureStructure(){
   if(!d.goals.completed)d.goals.completed=[];
   if(!d.networth)d.networth={accounts:[]};
   if(!d.monthlyNotes)d.monthlyNotes={};
+  if(!d.debts)d.debts={cards:[],strategy:"avalanche"};
+  if(!d.debts.cards)d.debts.cards=[];
+  d.debts.cards.forEach(cd=>{if(!cd.payments)cd.payments=[]});
 }
 
 function save(){
   if(dbRef)dbRef.set(S.data);
-  sha(S.pin).then(h=>localStorage.setItem("bt-"+h,JSON.stringify(S.data)));
+  const code=localStorage.getItem("bt-sync")||S.pin;
+  sha(code).then(h=>localStorage.setItem("bt-"+h,JSON.stringify(S.data)));
 }
 
 // ===== MONTH GENERATION =====
@@ -452,6 +441,45 @@ function openModal(cfg){S.modal=cfg;render();setTimeout(()=>{const i=document.ge
 function closeModal(){S.modal=null;render()}
 function nav(dir){const d=new Date(S.month+"-15");d.setMonth(d.getMonth()+dir);S.month=mk(d);render()}
 
+// ===== DEBT PLANNER =====
+function openDebtModal(){
+  S.modal={type:"newdebt"};render();
+}
+function openDebtEditModal(ci){
+  const cd=S.data.debts.cards[ci];
+  S.modal={type:"editdebt",ci,name:cd.name,balance:cd.balance,apr:cd.apr,minPayment:cd.minPayment};
+  render();
+}
+function openDebtBalanceModal(ci){
+  const cd=S.data.debts.cards[ci];
+  S.modal={type:"debtbalance",ci,label:cd.name,value:cd.balance};
+  render();
+}
+function saveNewDebt(){
+  const name=document.getElementById("m-label").value.trim()||"Card";
+  const balance=parseFloat(document.getElementById("m-balance").value)||0;
+  const apr=parseFloat(document.getElementById("m-apr").value)||0;
+  const minPay=parseFloat(document.getElementById("m-min").value)||0;
+  S.data.debts.cards.push({id:uid(),name,balance,apr,minPayment:minPay});
+  save();closeModal();
+}
+function saveDebtEdit(ci){
+  const cd=S.data.debts.cards[ci];
+  cd.name=document.getElementById("m-label").value.trim()||cd.name;
+  cd.balance=parseFloat(document.getElementById("m-balance").value)||0;
+  cd.apr=parseFloat(document.getElementById("m-apr").value)||0;
+  cd.minPayment=parseFloat(document.getElementById("m-min").value)||0;
+  save();closeModal();
+}
+function saveDebtBalance(ci){
+  S.data.debts.cards[ci].balance=parseFloat(document.getElementById("m-inp").value)||0;
+  save();closeModal();
+}
+function removeDebt(ci){
+  if(!confirm("Remove this card?"))return;
+  S.data.debts.cards.splice(ci,1);save();render();
+}
+
 // ===== QUICK ADD =====
 function openQuickAdd(){
   S.modal={type:"quickadd",qaType:"expense",selCat:null,selItem:null};
@@ -467,8 +495,20 @@ function saveQuickAdd(){
   const tagsRaw=document.getElementById("m-tags").value.trim();
   const tags=tagsRaw?tagsRaw.split(",").map(t=>t.trim()).filter(Boolean):[];
   const d=new Date();
-  const tx={id:uid(),date:(d.getMonth()+1)+"/"+d.getDate(),amount:amt,note,tags,auto:false};
+  const dateStr=(d.getMonth()+1)+"/"+d.getDate();
 
+  if(m.qaType==="payment"){
+    if(!m.selItem){alert("Pick a card");return}
+    const card=S.data.debts.cards.find(x=>x.id===m.selItem);
+    if(!card){alert("Card not found");return}
+    card.balance=Math.max(0,card.balance-amt);
+    if(!card.payments)card.payments=[];
+    card.payments.push({id:uid(),date:dateStr,amount:amt,note:note||"Payment",month:S.month});
+    save();closeModal();
+    return;
+  }
+
+  const tx={id:uid(),date:dateStr,amount:amt,note,tags,auto:false};
   const md=cm();
   let item=null;
 
@@ -496,7 +536,7 @@ function toggleSection(key){
 
 // ===== MAIN RENDER =====
 function render(){
-  if(S.phase==="pin")return renderPin();
+  if(S.phase==="pin"||S.phase==="welcome")return renderWelcome();
   const md=cm(),mL=monthLabel(S.month),em=S.edit;
   const tI=md.income.reduce((s,x)=>s+txTotal(x),0),tIB=md.income.reduce((s,x)=>s+x.budgeted,0);
   const tE=md.categories.reduce((s,c)=>s+c.items.reduce((ss,x)=>ss+txTotal(x),0),0);
@@ -507,7 +547,7 @@ function render(){
   // Top bar
   h+=`<div class="top"><div class="hdr"><h1>Budget</h1><div class="tb">`;
   if(S.view==="budget")h+=`<button onclick="resetMonth()">Reset</button><button class="${em?'on':''}" onclick="S.edit=!S.edit;render()">${em?"Done":"Edit"}</button>`;
-  if(S.view==="goals")h+=`<button onclick="openGoalModal()">+ Goal</button>`;
+  if(S.view==="goals")h+=`<button onclick="openDebtModal()">+ Card</button><button onclick="openGoalModal()">+ Goal</button>`;
   if(S.view==="settings")h+=`<button onclick="openNWModal()">+ Account</button>`;
   h+=`</div></div><div class="mnav"><button onclick="nav(-1)">‹</button><span>${mL}</span><button onclick="nav(1)">›</button></div></div>`;
 
@@ -519,7 +559,7 @@ function render(){
     </div><div class="cnt">`;
     // Monthly note
     const mNote=S.data.monthlyNotes[S.month]||"";
-    h+=`<div style="margin-bottom:8px;cursor:pointer" onclick="openModal({type:'monthnote'})">`;
+    h+=`<div style="margin-bottom:8px;cursor:pointer;min-height:44px;display:flex;align-items:center" onclick="openModal({type:'monthnote'})">`;
     h+=mNote?`<div class="mn">${esc(mNote)}</div>`:`<div style="font-size:11px;color:var(--t3);padding:3px 0">+ Add monthly note</div>`;
     h+=`</div>`;
     // Income
@@ -551,6 +591,86 @@ function render(){
 
   else if(S.view==="goals"){
     h+=`<div class="cnt" style="padding-top:8px">`;
+
+    // === DEBT PLANNER ===
+    const cards=S.data.debts?.cards||[];
+    if(cards.length>0){
+      h+=`<div class="sh" style="cursor:default"><span class="sh-t">Credit Cards</span><span class="sh-v">${fmt(cards.reduce((s,x)=>s+x.balance,0))} total</span></div>`;
+      // Strategy toggle
+      const strat=S.data.debts?.strategy||"avalanche";
+      h+=`<div class="debt-strat"><button class="${strat==='avalanche'?'on':''}" onclick="S.data.debts.strategy='avalanche';save();render()">Avalanche (save $)</button><button class="${strat==='snowball'?'on':''}" onclick="S.data.debts.strategy='snowball';save();render()">Snowball (quick wins)</button></div>`;
+      // Calculate payoff plan
+      const md=cm();
+      const totalIncome=md.income.reduce((s,x)=>s+txTotal(x),0)||md.income.reduce((s,x)=>s+x.budgeted,0);
+      const totalExpense=md.categories.reduce((s,c2)=>s+c2.items.reduce((ss,x)=>ss+x.budgeted,0),0);
+      const available=Math.max(0,totalIncome-totalExpense);
+      const totalMin=cards.reduce((s,x)=>s+(x.minPayment||0),0);
+      const extra=Math.max(0,available-totalMin);
+      // Sort cards by strategy
+      const sorted=[...cards].map((cd,i)=>({...cd,idx:i}));
+      if(strat==="avalanche")sorted.sort((a,b)=>b.apr-a.apr);
+      else sorted.sort((a,b)=>a.balance-b.balance);
+      // Assign payments
+      const payments={};
+      cards.forEach(cd=>{payments[cd.id]=cd.minPayment||0});
+      let extraLeft=extra;
+      for(const cd of sorted){if(cd.balance>0&&extraLeft>0){const add=Math.min(extraLeft,cd.balance-payments[cd.id]);if(add>0){payments[cd.id]+=add;extraLeft-=add}}}
+      // Calculate months to payoff (simple estimate with interest)
+      let simCards=cards.map(cd=>({...cd,bal:cd.balance}));
+      let months=0;const maxMonths=120;
+      while(simCards.some(cd=>cd.bal>0)&&months<maxMonths){
+        months++;
+        const simSorted=[...simCards].filter(cd=>cd.bal>0);
+        if(strat==="avalanche")simSorted.sort((a,b)=>b.apr-a.apr);
+        else simSorted.sort((a,b)=>a.bal-b.bal);
+        let simExtra=extra;
+        simCards.forEach(cd=>{if(cd.bal>0){const interest=cd.bal*(cd.apr/100/12);cd.bal+=interest;const pay=Math.min(cd.bal,cd.minPayment||0);cd.bal-=pay}});
+        for(const cd of simSorted){if(cd.bal>0&&simExtra>0){const pay=Math.min(cd.bal,simExtra);cd.bal-=pay;simExtra-=pay}}
+        simCards.forEach(cd=>{if(cd.bal<1)cd.bal=0});
+      }
+      const payoffDate=new Date();payoffDate.setMonth(payoffDate.getMonth()+months);
+      const totalInterest=cards.reduce((s,cd)=>{const mi=cd.balance*(cd.apr/100/12);return s+mi},0);
+      // Render cards
+      cards.forEach((cd,ci)=>{
+        const recPay=payments[cd.id]||0;
+        h+=`<div class="debt-card"><div class="dc-top"><div class="dc-name">${esc(cd.name)}</div><span class="dc-bal" onclick="openDebtBalanceModal(${ci})">${fmt(cd.balance)}</span></div>`;
+        h+=`<div class="dc-details"><span>${cd.apr}% APR</span><span>Min: ${fmt(cd.minPayment||0)}</span></div>`;
+        if(recPay>0)h+=`<div class="dc-pay">→ Pay ${fmt(recPay)} this month</div>`;
+        // Payment history
+      const pays=cd.payments||[];
+      if(pays.length>0){
+        const payKey="pay-"+cd.id;
+        const payOpen=S.expanded[payKey];
+        h+=`<span class="tx-toggle" onclick="S.expanded['${payKey}']=!S.expanded['${payKey}'];render()">${payOpen?'▾ Hide payments':'▸ '+pays.length+' payment'+(pays.length!==1?'s':'')}</span>`;
+        if(payOpen){
+          h+=`<div class="txlog">`;
+          pays.slice().reverse().forEach(py=>{
+            h+=`<div class="txlog-i"><div class="meta"><span class="dt">${py.date||""}</span><span class="nt">${esc(py.note||"")}</span></div><span class="amt" style="color:var(--gn)">-${fmt(py.amount)}</span></div>`;
+          });
+          h+=`</div>`;
+        }
+      }
+      h+=`<div style="display:flex;gap:4px;margin-top:8px"><button class="qa-item" onclick="openDebtEditModal(${ci})">Edit</button><button class="qa-item" onclick="removeDebt(${ci})">Remove</button></div>`;
+        h+=`</div>`;
+      });
+      // Summary
+      h+=`<div class="debt-summary">`;
+      h+=`<div class="ds-row"><span class="ds-label">Monthly income (budgeted)</span><span class="ds-val">${fmt(totalIncome)}</span></div>`;
+      h+=`<div class="ds-row"><span class="ds-label">Non-debt expenses</span><span class="ds-val">${fmt(totalExpense)}</span></div>`;
+      h+=`<div class="ds-row"><span class="ds-label">Available for debt</span><span class="ds-val" style="color:var(--gn)">${fmt(available)}</span></div>`;
+      h+=`<div style="border-top:1px solid var(--bd);margin:6px 0"></div>`;
+      h+=`<div class="ds-row"><span class="ds-label">Total monthly payment</span><span class="ds-val">${fmt(Object.values(payments).reduce((s,v)=>s+v,0))}</span></div>`;
+      if(months<maxMonths){
+        h+=`<div class="ds-row"><span class="ds-label">Debt-free by</span><span class="ds-val" style="color:var(--gn)">${MO[payoffDate.getMonth()]} ${payoffDate.getFullYear()}</span></div>`;
+        h+=`<div class="ds-row"><span class="ds-label">Months remaining</span><span class="ds-val">${months}</span></div>`;
+      } else {
+        h+=`<div class="ds-row"><span class="ds-label" style="color:var(--rd)">Minimum payments don't cover interest — increase income or cut expenses</span></div>`;
+      }
+      h+=`</div>`;
+      h+=`<div style="height:16px"></div>`;
+    }
+
+    // === GOALS ===
     const ga=S.data.goals?.active||[];
     ga.forEach((g,gi)=>{
       let paid,remain,pc,lb;
@@ -628,9 +748,14 @@ function render(){
         <button class="add" onclick="exportData()">Export backup (JSON)</button>
         <button class="add" onclick="importData()">Import backup</button>
       </div></div>`;
-    h+=`<div class="sec"><div class="sh"><span class="sh-t">Account</span><span class="sh-v"></span></div>
-      <div style="padding:5px 0;font-size:11px;color:var(--t2)">Sync: ${db?'Cloud ☁️':'Local 📱'}</div>
-      <button class="add" style="color:var(--rd);border-color:var(--rd)" onclick="localStorage.removeItem('bt-pin');location.reload()">Log out</button>
+    const syncCode=localStorage.getItem("bt-sync")||"";
+    h+=`<div class="sec"><div class="sh"><span class="sh-t">Sync</span><span class="sh-v">${db?'Cloud ☁️':'Local 📱'}</span></div>
+      <div style="padding:8px 0">
+        <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Enter this code on another device to connect:</div>
+        <div style="font-size:18px;font-weight:700;letter-spacing:3px;padding:12px;background:var(--c1);border-radius:10px;text-align:center;font-family:monospace;user-select:all;-webkit-user-select:all;box-shadow:var(--sh)">${syncCode}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:6px">Keep this private. Anyone with this code can access your budget.</div>
+      </div>
+      <button class="add" style="color:var(--rd);border-color:var(--rd)" onclick="if(confirm('Log out? You\'ll need your sync code to reconnect.')){localStorage.removeItem('bt-sync');location.reload()}">Log out</button>
     </div></div>`;
   }
 
@@ -712,7 +837,7 @@ function renderSection(items,title,catId,em,isIncome){
             h+=`<div class="txlog-i"><div class="meta"><span class="dt">${tx.date||""}</span><span class="nt">${esc(tx.note||"")}</span>`;
             if(tx.tags?.length)tx.tags.forEach(tg=>h+=`<span class="tg">${esc(tg)}</span>`);
             h+=`</div><span class="amt">${fmt(tx.amount)}</span>`;
-            if(!tx.auto)h+=`<button class="xb" onclick="removeTxById('${it.id}',${catId?`'${catId}'`:'null'},'${tx.id}')" style="font-size:10px">×</button>`;
+            if(!tx.auto)h+=`<button class="xb" onclick="removeTxById('${it.id}',${catId?`'${catId}'`:'null'},'${tx.id}')" style="font-size:14px">×</button>`;
             h+=`</div>`;
           });
           h+=`</div>`;
@@ -793,7 +918,8 @@ function renderModal(){
     const selItem=m.selItem||null;
     // Type toggle
     h+=`<h3>Quick add</h3>`;
-    h+=`<div class="qa-type"><button class="${qaType==='expense'?'on':''}" onclick="S.modal.qaType='expense';S.modal.selCat=null;S.modal.selItem=null;render()">Expense</button><button class="${qaType==='income'?'on':''}" onclick="S.modal.qaType='income';S.modal.selCat=null;S.modal.selItem=null;render()">Income</button></div>`;
+    const hasCards=(S.data.debts?.cards||[]).length>0;
+    h+=`<div class="qa-type"><button class="${qaType==='expense'?'on':''}" onclick="S.modal.qaType='expense';S.modal.selCat=null;S.modal.selItem=null;render()">Expense</button><button class="${qaType==='income'?'on':''}" onclick="S.modal.qaType='income';S.modal.selCat=null;S.modal.selItem=null;render()">Income</button>${hasCards?`<button class="${qaType==='payment'?'on':''}" onclick="S.modal.qaType='payment';S.modal.selCat=null;S.modal.selItem=null;render()">Payment</button>`:''}</div>`;
     // Amount
     h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:24px;font-weight:700;text-align:center;padding:16px" onkeydown="if(event.key==='Enter'&&document.getElementById('m-note'))document.getElementById('m-note').focus()">`;
     // Note
@@ -817,14 +943,46 @@ function renderModal(){
           h+=`</div>`;
         }
       }
-    } else {
+    } else if(qaType==="income"){
       h+=`<label>Source</label><div class="qa-cats">`;
       md2.income.forEach(inc=>{
         h+=`<button class="qa-cat ${selItem===inc.id?'on':''}" onclick="S.modal.selItem='${inc.id}';render()">${esc(inc.label)}</button>`;
       });
       h+=`</div>`;
+    } else if(qaType==="payment"){
+      const pcards=S.data.debts?.cards||[];
+      h+=`<label>Which card?</label><div class="qa-cats">`;
+      pcards.forEach(cd=>{
+        h+=`<button class="qa-cat ${selItem===cd.id?'on':''}" onclick="S.modal.selItem='${cd.id}';render()">${esc(cd.name)} <span style="font-size:11px;color:var(--rd)">${fmt(cd.balance)}</span></button>`;
+      });
+      h+=`</div>`;
+      if(selItem){
+        const selCard=pcards.find(x=>x.id===selItem);
+        if(selCard)h+=`<div style="font-size:12px;color:var(--t2);margin-top:4px;padding:6px 10px;background:var(--bg);border-radius:8px">Balance after: <b style="color:var(--gn)">${fmt(Math.max(0,selCard.balance-(parseFloat(document.getElementById('m-inp')?.value)||0)))}</b></div>`;
+      }
     }
     h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveQuickAdd()">Add</button></div>`;
+  }
+  else if(m.type==="newdebt"){
+    h+=`<h3>Add credit card</h3>
+      <label>Card name</label><input id="m-label" placeholder="e.g. Chase Sapphire, Discover">
+      <label>Current balance</label><input id="m-balance" type="number" inputmode="decimal" placeholder="0">
+      <label>APR (%)</label><input id="m-apr" type="number" inputmode="decimal" placeholder="e.g. 24.99">
+      <label>Minimum payment</label><input id="m-min" type="number" inputmode="decimal" placeholder="e.g. 35">
+      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveNewDebt()">Add</button></div>`;
+  }
+  else if(m.type==="editdebt"){
+    h+=`<h3>Edit card</h3>
+      <label>Card name</label><input id="m-label" value="${esc(m.name)}">
+      <label>Current balance</label><input id="m-balance" type="number" inputmode="decimal" value="${m.balance}">
+      <label>APR (%)</label><input id="m-apr" type="number" inputmode="decimal" value="${m.apr}">
+      <label>Minimum payment</label><input id="m-min" type="number" inputmode="decimal" value="${m.minPayment}">
+      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveDebtEdit(${m.ci})">Save</button></div>`;
+  }
+  else if(m.type==="debtbalance"){
+    h+=`<h3>${esc(m.label)}</h3>
+      <label>Current balance</label><input id="m-inp" type="number" inputmode="decimal" value="${m.value}" onkeydown="if(event.key==='Enter')saveDebtBalance(${m.ci})">
+      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveDebtBalance(${m.ci})">Save</button></div>`;
   }
   else if(m.type==="monthnote"){
     h+=`<h3>Monthly note — ${monthLabel(S.month)}</h3>
@@ -962,12 +1120,17 @@ function saveNWBalance(ai){
 
 // Export/Import
 function exportData(){
-  const blob=new Blob([JSON.stringify(S.data,null,2)],{type:"application/json"});
+  const exportData={...S.data,_syncCode:localStorage.getItem("bt-sync")||""};
+  const blob=new Blob([JSON.stringify(exportData,null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="budget-backup-"+mk()+".json";a.click();
 }
 function importData(){
   const inp=document.createElement("input");inp.type="file";inp.accept=".json";
-  inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{S.data=JSON.parse(ev.target.result);ensureStructure();save();render();alert("Restored!")}catch{alert("Invalid file")}};r.readAsText(f)};
+  inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{
+    const parsed=JSON.parse(ev.target.result);
+    if(parsed._syncCode){localStorage.setItem("bt-sync",parsed._syncCode);S.pin=parsed._syncCode;delete parsed._syncCode}
+    S.data=parsed;ensureStructure();save();render();alert("Restored!")
+  }catch{alert("Invalid file")}};r.readAsText(f)};
   inp.click();
 }
 // ===== CHARTS =====
@@ -1027,27 +1190,41 @@ function doSearch(){
   },150); // debounce 150ms
 }
 
-// ===== PIN SCREEN =====
-function autoConnect(){
-  const p=localStorage.getItem("bt-pin");
-  if(p){S.pin=p;connect(p)}
+// ===== AUTH =====
+function generateSyncCode(){
+  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code="";for(let i=0;i<16;i++)code+=chars[Math.floor(Math.random()*chars.length)];
+  return code;
 }
-function renderPin(){
-  const stored=localStorage.getItem("bt-pin");
-  let h=`<div class="pin-s"><h2>💰 Budget</h2>`;
-  if(stored){
-    h+=`<p>Welcome back</p><button onclick="autoConnect()">Open my budget</button><button class="sec-btn" onclick="localStorage.removeItem('bt-pin');render()">Different PIN</button>`;
+
+async function autoStart(){
+  let code=localStorage.getItem("bt-sync");
+  if(code){
+    S.pin=code;await connect(code);
   } else {
-    h+=`<p>Enter a PIN to access your budget. Same PIN = same data on any device.</p><input id="pin-input" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" onkeydown="if(event.key==='Enter')document.getElementById('pin-btn').click()"><button id="pin-btn" onclick="const p=document.getElementById('pin-input').value;if(p.length<4){S.err='PIN must be 4+ characters';render();return}S.pin=p;connect(p)">Continue</button>`;
+    S.phase="welcome";render();
+  }
+}
+
+function renderWelcome(){
+  let h=`<div class="pin-s"><h2>💰 Budget</h2>`;
+  if(S.welcomeMode==="link"){
+    h+=`<p>Enter the sync code from your other device to connect to your existing budget.</p>`;
+    h+=`<input id="sync-input" style="width:260px;letter-spacing:3px;font-size:16px" placeholder="Enter sync code" onkeydown="if(event.key==='Enter')document.getElementById('link-btn').click()">`;
+    h+=`<button id="link-btn" onclick="const c=document.getElementById('sync-input').value.trim().toUpperCase();if(c.length<8){S.err='Code too short';render();return}localStorage.setItem('bt-sync',c);S.pin=c;connect(c)">Connect</button>`;
     if(S.err)h+=`<div class="err">${S.err}</div>`;
-    h+=`<div style="font-size:10px;color:var(--t3);margin-top:6px">${hasFC()?'☁️ Cloud sync enabled':'📱 Local only — add Firebase for sync'}</div>`;
+    h+=`<button class="sec-btn" onclick="S.welcomeMode=null;S.err='';render()">Back</button>`;
+  } else {
+    h+=`<p>Your budget data syncs across devices and is protected by a unique code only you have.</p>`;
+    h+=`<button onclick="const c=generateSyncCode();localStorage.setItem('bt-sync',c);S.pin=c;connect(c)">Start fresh</button>`;
+    h+=`<button class="sec-btn" onclick="S.welcomeMode='link';render()">Connect to another device</button>`;
   }
   h+=`</div>`;
   document.getElementById("app").innerHTML=h;
 }
 
 // ===== INIT =====
-initFB();render();
+initFB();autoStart();
 </script>
 </body>
 </html>
