@@ -546,12 +546,19 @@ function signOut(){
 }
 
 function startOver(){
+  var promises=[];
   if(db&&S.firebaseUser){
-    db.ref("budgets/"+S.firebaseUser.uid).remove().catch(function(){});
+    promises.push(db.ref("budgets/"+S.firebaseUser.uid).remove().catch(function(){}));
   }
-  if(auth)auth.signOut().catch(function(){});
+  if(auth){
+    promises.push(auth.signOut().catch(function(){}));
+  }
   localStorage.clear();
-  location.reload();
+  Promise.all(promises).then(function(){
+    location.reload();
+  }).catch(function(){
+    location.reload();
+  });
 }
 
 function forceSync(){
