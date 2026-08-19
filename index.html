@@ -16,7 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-:root{--st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+:root{
   --bg:#2c2318;
   --c1:#382d21;
   --c2:#443626;
@@ -37,7 +37,7 @@ html,body{background:#2c2318!important}body{font-family:-apple-system,BlinkMacSy
 button{touch-action:manipulation;min-height:36px;font-family:inherit;cursor:pointer}input,select,textarea{font-family:inherit}
 
 /* Layout */
-.top{position:sticky;padding-top:var(--st);top:0;z-index:10;background:var(--bg);padding:12px 16px 0;padding-top:calc(12px + var(--st))}
+.top{position:sticky;top:0;z-index:10;background:var(--bg);padding:12px 16px 0;padding-top:calc(12px + var(--st))}
 .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .hdr h1{font-size:22px;font-weight:800}
 .tb{display:flex;gap:6px}
@@ -172,7 +172,7 @@ button{touch-action:manipulation;min-height:36px;font-family:inherit;cursor:poin
 
 
 /* FAB */
-.fab{position:fixed;bottom:calc(68px + var(--sb));right:16px;width:56px;height:56px;border-radius:50%;background:var(--ac);color:#ede0cc;border:none;font-size:28px;font-weight:300;box-shadow:0 4px 14px rgba(219,181,110,.35);z-index:9;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.fab{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom,0px));right:16px;width:56px;height:56px;border-radius:50%;background:var(--ac);color:#ede0cc;border:none;font-size:28px;font-weight:300;box-shadow:0 4px 14px rgba(219,181,110,.35);z-index:9;display:flex;align-items:center;justify-content:center;transition:transform .15s}
 .fab:active{transform:scale(.9)}
 }
 
@@ -298,7 +298,7 @@ button{touch-action:manipulation;min-height:36px;font-family:inherit;cursor:poin
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="safe-top" style="height:env(safe-area-inset-top,0px);min-height:0;background:var(--bg,#2c2318);position:sticky;top:0;z-index:100"></div><div id="app"></div>
 <script>
 // ===== CONFIG =====
 const FIREBASE_CONFIG = {
@@ -3482,7 +3482,7 @@ function renderWelcome(){
   let h=`<div class="ob">`;
 
   const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true},{l:"Insurance",r:true}],"Food & Groceries":[{l:"Groceries",r:false},{l:"Eating out",r:false},{l:"Coffee",r:false},{l:"Delivery",r:false}],"Cats":[{l:"Cat food",r:false},{l:"Litter",r:false},{l:"Vet",r:false}],"Pets":[{l:"Pet food",r:false},{l:"Vet",r:false},{l:"Supplies",r:false}],"Transport":[{l:"Metro / Bus",r:true},{l:"Uber / Lyft",r:false},{l:"Gas",r:false}],"Going Out":[{l:"Bars / Drinks",r:false},{l:"Events",r:false}],"Savings":[{l:"Emergency fund",r:true},{l:"Investments",r:true}],"Subscriptions":[{l:"Streaming",r:true},{l:"Software",r:true},{l:"Phone plan",r:true}],"Shopping":[{l:"Clothes",r:false},{l:"Amazon",r:false}],"Health":[{l:"Gym",r:true},{l:"Pharmacy",r:false}],"Utilities":[{l:"Electric",r:true},{l:"Internet",r:true},{l:"Phone",r:true}]};
-  const backBtn=(to)=>`<button class="ob-skip" onclick="S.obStep=${to};render()" style="position:fixed;top:var(--st);left:0;z-index:50;padding:12px 16px;font-size:15px">‹ Back</button>`;
+  const backBtn=(to)=>`<button class="ob-skip" onclick="S.obStep=${to};render()" style="align-self:flex-start;padding:8px 0;font-size:15px;margin-bottom:8px">‹ Back</button>`;
 
   if(step===0){
     h+=`<div class="ob-top"><div style="font-size:48px;margin-bottom:12px">💰</div><h2>Budget</h2>
