@@ -1047,6 +1047,45 @@ function toggleRecurring(itemId,catId){
   save();render();
 }
 
+function doConfirmPay(){
+  var m=S.modal;if(!m||m.type!=='confirmpay')return;
+  var md=cm();var item=null;
+  if(m.catId){var cat=findById(md.categories,m.catId);if(cat)item=findById(cat.items,m.itemId)}
+  else{item=findById(md.income,m.itemId)}
+  if(!item||!item.recurring)return;
+  var autoTx=item.transactions.find(function(t){return t.auto});
+  if(!autoTx)return;
+  autoTx.confirmed=true;
+  autoTx.amount=item.budgeted;
+  autoTx.isoDate=new Date().toISOString().split('T')[0];
+  autoTx.date=(new Date().getMonth()+1)+'/'+new Date().getDate();
+  autoTx.paidWith=m.paidWith||'cash';
+  // Balance tracking
+  if(item._balance!==undefined&&item._balance>0){
+    if(item._apr>0){var moI=item._balance*(item._apr/100/12);item._balance+=moI}
+    item._balance=Math.max(0,item._balance-item.budgeted);
+  }
+  // Deduct from payment source
+  if(m.paidWith==='debit'&&m.debitAccount){
+    var dA=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
+    if(dA){var cb=getNWBalance(dA,S.month);dA.balances[S.month]=cb-m.amount}
+  }
+  if(m.paidWith&&m.paidWith!=='cash'&&m.paidWith!=='debit'){
+    var eC=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
+    if(eC)eC.balance+=m.amount;
+  }
+  // Goal tracking
+  var matchGoal=S.data.goals?.active?.find(function(g){return g.linkedItem===item.id||g.label===item.label});
+  if(matchGoal){
+    if(matchGoal.type==='payoff')matchGoal.current=(item._balance!==undefined?item._startBalance-item._balance:Math.min(matchGoal.target,(matchGoal.current||0)+m.amount));
+    else matchGoal.current=Math.min(matchGoal.target,(matchGoal.current||0)+m.amount);
+  }
+  save();closeModal();checkAndAlert();
+  if(item._balance>0)toast(item.label+' paid — '+fmt(item._balance)+' remaining');
+  else if(!item._balance)toast(item.label+' paid — '+fmt(item.budgeted)+' ✓');
+  else toast(item.label+' paid off! ✓');
+}
+
 function confirmPaid(itemId,catId){
   const md=cm();let item=null;
   if(catId){const cat=findById(md.categories,catId);if(cat)item=findById(cat.items,itemId)}
@@ -1069,7 +1108,15 @@ function confirmPaid(itemId,catId){
     }
     toast(item.label+" unmarked");
   } else {
-    // Mark as paid
+    // Show payment source picker
+    var accts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+    var cards2=S.data.debts?.cards||[];
+    if(accts.length>0||cards2.length>0){
+      S.modal={type:'confirmpay',itemId:itemId,catId:catId,amount:item.budgeted,label:item.label};
+      render();
+      return;
+    }
+    // No accounts set up - just confirm
     autoTx.confirmed=true;
     autoTx.amount=item.budgeted;
     autoTx.isoDate=new Date().toISOString().split("T")[0];
@@ -1876,9 +1923,19 @@ function saveQuickAdd(){
   tx.paidWith=m.paidWith||"cash";
   item.transactions.push(tx);
   // If paid with credit card, increase card balance
-  if(m.qaType==="expense"&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
+  if(!m.isIncome&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
     var ecard=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
     if(ecard)ecard.balance+=amt;
+  }
+  // If paid with debit, deduct from account
+  if(!m.isIncome&&m.paidWith==="debit"&&m.debitAccount){
+    var dAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
+    if(dAcct){var cb=getNWBalance(dAcct,S.month);dAcct.balances[S.month]=cb-amt}
+  }
+  // If income, deposit to account
+  if(m.isIncome&&m.depositTo&&m.depositTo!=="none"){
+    var iAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.depositTo});
+    if(iAcct){var ib=getNWBalance(iAcct,S.month);iAcct.balances[S.month]=ib+amt}
   }
   // If paid with debit, deduct from bank account
   if(m.qaType==="expense"&&m.paidWith==="debit"&&m.debitAccount){
@@ -2192,7 +2249,7 @@ function _render(){
       const totalUtil=totalLim>0?Math.round(totalBal/totalLim*100):0;
       // Sanity check minimums: real min payments are typically max($25, 1-3% of balance)
       cards.forEach(cd2=>{const realMin=Math.max(25,Math.round(cd2.balance*0.01));if(cd2.minPayment>cd2.balance)cd2.minPayment=cd2.balance;if(cd2.minPayment>cd2.balance*0.15)cd2.minPayment=realMin;if(cd2.balance>0&&cd2.minPayment<=0)cd2.minPayment=realMin});
-      const totalMin=cards.reduce((s,x)=>s+Math.min(x.minPayment||25,x.balance),0);
+      var totalMin=cards.reduce(function(s,x){var mp=x.minPayment!=null?x.minPayment:25;return s+Math.min(mp,x.balance)},0);
       const monthlyInterest=cards.reduce((s,x)=>s+x.balance*(x.apr/100/12),0);
       const weightedApr=totalBal>0?cards.reduce((s,x)=>s+x.apr*(x.balance/totalBal),0):0;
 
@@ -2232,7 +2289,7 @@ function _render(){
       // totalBudget = total amount you put toward ALL cards each month
       function simPayoffBudget(totalBudget){
         if(totalBudget<=0)return{months:999,interest:0};
-        let sc=cards.map(cd2=>({id:cd2.id,name:cd2.name,bal:cd2.balance,apr:cd2.apr,min:cd2.minPayment||25}));
+        var sc=cards.map(function(cd2){return{id:cd2.id,name:cd2.name,bal:cd2.balance,apr:cd2.apr,min:cd2.minPayment!=null?cd2.minPayment:25}});
         let mo=0,totalInt=0;
         while(sc.some(cd2=>cd2.bal>0.01)&&mo<360){
           mo++;
@@ -2436,9 +2493,9 @@ function _render(){
 
         // Card details grid
         h+=`<div style="margin-top:6px">`;
-        h+=`<div class="card-stat"><span class="cs-label">Interest rate (APR)</span><span class="cs-val">${cd2.apr}%</span></div>`;
+        h+=`<div class="card-stat" style="cursor:pointer" onclick="openDebtEditModal(${ci})"><span class="cs-label">Interest rate (APR)</span><span class="cs-val">${cd2.apr}% <span style="color:var(--t3);font-size:10px">✎</span></span></div>`;
         h+=`<div class="card-stat"><span class="cs-label">Monthly interest</span><span class="cs-val" style="color:var(--rd)">${fmt(cardInterest)}</span></div>`;
-        h+=`<div class="card-stat"><span class="cs-label">Minimum</span><span class="cs-val">${fmt(cd2.minPayment||0)}</span></div>`;
+        h+=`<div class="card-stat" style="cursor:pointer" onclick="openDebtEditModal(${ci})"><span class="cs-label">Minimum</span><span class="cs-val">${fmt(cd2.minPayment||0)} <span style="color:var(--t3);font-size:10px">✎</span></span></div>`;
         if(cd2.stmtDate){const cDay2=clampDay(cd2.stmtDate,parseInt(S.month.split("-")[1])-1);h+=`<div class="card-stat"><span class="cs-label">Bill due date</span><span class="cs-val">${cDay2}${cDay2===1?'st':cDay2===2?'nd':cDay2===3?'rd':'th'} of month${cDay2!==cd2.stmtDate?' (set as '+cd2.stmtDate+')':''}</span></div>`}
         h+=`</div>`;
 
@@ -3200,14 +3257,58 @@ function renderModal(){
   var isFresh=S._modalFresh;S._modalFresh=false;
   let h=`<div class="mbg" onclick="if(event.target===this){if(S._returnToQuickAdd)cancelInline();else closeModal()}"><div class="mdl${isFresh?' fresh':''}">`;
 
-  if(m.type==="addtx"){
+  if(m.type==="confirmpay"){
+    var cpAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+    var cpCards=S.data.debts?.cards||[];
+    var cpPay=m.paidWith||'';
+    h+=`<h3>Confirm ${esc(m.label)}</h3>`;
+    h+=`<div style="text-align:center;margin-bottom:12px;font-size:20px;font-weight:700">${fmt(m.amount)}</div>`;
+    h+=`<label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);display:block">Paid with</label><div class="qa-cats">`;
+    h+=`<button class="qa-cat ${cpPay==='cash'?'on':''}" onclick="S.modal.paidWith='cash';render()">Cash</button>`;
+    h+=`<button class="qa-cat ${cpPay==='debit'?'on':''}" onclick="S.modal.paidWith='debit';render()">Debit</button>`;
+    cpCards.forEach(function(cd){h+=`<button class="qa-cat ${cpPay===cd.id?'on':''}" onclick="S.modal.paidWith='${cd.id}';render()">${esc(cd.name)}</button>`});
+    h+=`</div>`;
+    if(cpPay==='debit'&&cpAccts.length>0){
+      var cpDebit=m.debitAccount||'';
+      h+=`<div style="margin-top:6px"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);display:block">From account</label><div class="qa-cats">`;
+      cpAccts.forEach(function(a){h+=`<button class="qa-cat ${cpDebit===a.id?'on':''}" style="font-size:12px;padding:6px 10px" onclick="S.modal.debitAccount='${a.id}';render()">${esc(a.label)}</button>`});
+      h+=`</div></div>`;
+    }
+    h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="doConfirmPay()">Confirm</button></div>`;
+  }
+  else if(m.type==="addtx"){
     h+=`<h3>${esc(m.label)}</h3>`;
     if(m.currentTotal>0)h+=`<div style="font-size:12px;color:var(--t2);margin-bottom:6px">Current total: ${fmt(m.currentTotal)}</div>`;
-    h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" onkeydown="if(event.key==='Enter')saveTx()">
-      <label>What's it for?</label><input id="m-note" maxlength="100" placeholder="e.g. Uber Eats, dinner with friends">
-      <label>Tags (comma separated, optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work lunch">
-      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button>`;
-    if(m.currentTotal>0)h+=`<button class="cn" onclick="clearItemTxs('${m.itemId}',${m.catId?`'${m.catId}'`:'null'})">Clear all</button>`;
+    h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" value="${m._amt||''}" oninput="S.modal._amt=this.value" onkeydown="if(event.key==='Enter')saveTx()">
+      <label>What's it for?</label><input id="m-note" maxlength="100" placeholder="e.g. Uber Eats, dinner with friends" value="${esc(m._note||'')}">
+      <label>Tags (comma separated, optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work lunch" value="${esc(m._tags||'')}">`;
+    if(!m.isIncome){
+      var txCards=S.data.debts?.cards||[];
+      var txAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+      var txPay=m.paidWith||'cash';
+      h+=`<label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-top:8px;display:block">Paid with</label><div class="qa-cats">`;
+      h+=`<button class="qa-cat ${txPay==='cash'?'on':''}" onclick="saveModalInputs();S.modal.paidWith='cash';render()">Cash</button>`;
+      h+=`<button class="qa-cat ${txPay==='debit'?'on':''}" onclick="saveModalInputs();S.modal.paidWith='debit';render()">Debit</button>`;
+      txCards.forEach(function(cd){h+=`<button class="qa-cat ${txPay===cd.id?'on':''}" onclick="saveModalInputs();S.modal.paidWith='${cd.id}';render()">${esc(cd.name)}</button>`});
+      h+=`</div>`;
+      if(txPay==='debit'&&txAccts.length>0){
+        var txDebitAcct=m.debitAccount||'';
+        h+=`<div style="margin-top:6px"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);display:block">From account</label><div class="qa-cats">`;
+        txAccts.forEach(function(a){h+=`<button class="qa-cat ${txDebitAcct===a.id?'on':''}" style="font-size:12px;padding:6px 10px" onclick="saveModalInputs();S.modal.debitAccount='${a.id}';render()">${esc(a.label)}</button>`});
+        h+=`</div></div>`;
+      }
+    } else {
+      var txDepAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+      if(txDepAccts.length>0){
+        var txDep=m.depositTo||'none';
+        h+=`<label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-top:8px;display:block">Deposit to</label><div class="qa-cats">`;
+        h+=`<button class="qa-cat ${txDep==='none'?'on':''}" onclick="saveModalInputs();S.modal.depositTo='none';render()">Don't track</button>`;
+        txDepAccts.forEach(function(a){h+=`<button class="qa-cat ${txDep===a.id?'on':''}" onclick="saveModalInputs();S.modal.depositTo='${a.id}';render()">${esc(a.label)}</button>`});
+        h+=`</div>`;
+      }
+    }
+    h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button>`;
+    if(m.currentTotal>0){var clearCatArg=m.catId?"'"+m.catId+"'":"null";h+=`<button class="cn" onclick="clearItemTxs('${m.itemId}',${clearCatArg})">Clear all</button>`;}
     h+=`<button class="sv" onclick="saveTx()">Add</button></div>`;
   }
   else if(m.type==="edititem"){
@@ -3804,9 +3905,19 @@ function saveTx(){
   tx.paidWith=m.paidWith||"cash";
   item.transactions.push(tx);
   // If paid with credit card, increase card balance
-  if(m.qaType==="expense"&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
+  if(!m.isIncome&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
     var ecard=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
     if(ecard)ecard.balance+=amt;
+  }
+  // If paid with debit, deduct from account
+  if(!m.isIncome&&m.paidWith==="debit"&&m.debitAccount){
+    var dAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
+    if(dAcct){var cb=getNWBalance(dAcct,S.month);dAcct.balances[S.month]=cb-amt}
+  }
+  // If income, deposit to account
+  if(m.isIncome&&m.depositTo&&m.depositTo!=="none"){
+    var iAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.depositTo});
+    if(iAcct){var ib=getNWBalance(iAcct,S.month);iAcct.balances[S.month]=ib+amt}
   }
   // If paid with debit, deduct from bank account
   if(m.qaType==="expense"&&m.paidWith==="debit"&&m.debitAccount){
