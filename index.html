@@ -360,7 +360,7 @@ async function connect(pin){
     const snap=await dbRef.once("value");
     S.data=snap.exists()?snap.val():JSON.parse(JSON.stringify(DEF));
     if(!snap.exists())await dbRef.set(S.data);
-    dbRef.on("value",s=>{if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();render()}});
+    dbRef.on("value",s=>{if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){console.error("Sync render error:",e)}}});
   } else {
     const l=localStorage.getItem("bt-"+h);
     S.data=l?JSON.parse(l):JSON.parse(JSON.stringify(DEF));
@@ -384,7 +384,8 @@ async function connect(pin){
   ensureStructure();
   archiveOldMonths();
   if(S.data.theme&&THEMES[S.data.theme])applyTheme(S.data.theme);
-  S.pin=pin;S.phase="app";render();
+  S.pin=pin;S.phase="app";
+  try{render()}catch(e){console.error("Initial render failed:",e);S.view="budget";S.budgetView="dash";S.modal=null;S.expanded={};S.collapsed={};render()}
 }
 
 function resetMonthTxs(){
@@ -487,6 +488,7 @@ function archiveOldMonths(){
 }
 
 function ensureStructure(){
+  if(!S.data||typeof S.data!=="object"){S.data=JSON.parse(JSON.stringify(DEF));return}
   const d=S.data;
   if(!d.template)d.template=JSON.parse(JSON.stringify(DEF.template));
   if(!d.months)d.months={};
@@ -514,7 +516,25 @@ function ensureStructure(){
   if(!d.timezone)d.timezone=Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone||'';
   if(!d.subscriptions)d.subscriptions=[];
   if(!d.debts.cards)d.debts.cards=[];
-  d.debts.cards.forEach(cd=>{if(!cd.payments)cd.payments=[]});
+  d.debts.cards.forEach(cd=>{if(!cd.payments)cd.payments=[];if(!cd.id)cd.id=uid()});
+  // Ensure all months have proper structure
+  Object.keys(d.months||{}).forEach(mk2=>{
+    const md2=d.months[mk2];if(!md2){delete d.months[mk2];return}
+    if(!md2.categories)md2.categories=[];
+    if(!md2.income)md2.income=[];
+    md2.categories.forEach(cat=>{
+      if(!cat.items)cat.items=[];
+      cat.items.forEach(it=>{if(!it.transactions)it.transactions=[]});
+    });
+    md2.income.forEach(it=>{if(!it.transactions)it.transactions=[]});
+  });
+  // Ensure NW accounts have balances objects
+  (d.networth?.accounts||[]).forEach(a=>{if(!a.balances)a.balances={};if(!a.id)a.id=uid()});
+  // Template items must have ids
+  (d.template?.categories||[]).forEach(c2=>{if(!c2.id)c2.id=uid();(c2.items||[]).forEach(i=>{if(!i.id)i.id=uid()})});
+  (d.template?.income||[]).forEach(i=>{if(!i.id)i.id=uid()});
+  // Nav history
+  if(!S._navHistory)S._navHistory=[];
 }
 
 let _saveTimer=null;
@@ -3337,7 +3357,7 @@ async function doChangePass(){
     await db.ref("budgets/"+oldHash).remove();
     // Reconnect
     dbRef.off();dbRef=db.ref("budgets/"+newHash);
-    dbRef.on("value",s=>{if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();render()}});
+    dbRef.on("value",s=>{if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){console.error("Sync render error:",e)}}});
   } else {
     const oldHash=await sha(oldCode);
     const newHash=await sha(newCode);
