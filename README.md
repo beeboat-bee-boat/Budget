@@ -1,4 +1,4 @@
-https://beeboat-bee-boat.github.io/Budget/?v=2- link to project
+https://beeboat-bee-boat.github.io/Budget/ link to project
 
 Budget Tracker v0.1 — Release Notes
 
