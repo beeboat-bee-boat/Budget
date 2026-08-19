@@ -238,7 +238,7 @@ const DEF={
 
 // ===== STATE =====
 let db=null,dbRef=null;
-var _modalScroll=0;
+var _modalScroll=0;var _dismissedAlerts={};
 let S={phase:"pin",_navHistory:[],pin:"",data:null,month:mk(),view:"budget",budgetView:"dash",edit:false,modal:null,err:"",expanded:{},chartType:"spending",searchQ:"",searchCat:"all",searchRange:"3",activeGroup:-1,payoffTarget:12};
 
 // ===== FIREBASE =====
@@ -1158,9 +1158,11 @@ function saveEditBudget(){
 }
 
 function saveEditAcct(){
-  const m=S.modal;const acct=S.data.networth.accounts[m.ai];if(!acct)return;
-  acct.label=document.getElementById("ea-name")?.value?.trim()||acct.label;
-  acct.balances[S.month]=parseFloat(document.getElementById("ea-bal")?.value)||0;
+  var m2=S.modal;var acct=S.data.networth.accounts[m2.ai];if(!acct)return;
+  acct.label=(document.getElementById("ea-name")||{}).value||acct.label;acct.label=acct.label.trim();
+  var newBal=parseFloat((document.getElementById("ea-bal")||{}).value);
+  if(!isNaN(newBal))acct.balances[S.month]=newBal;
+  var typeEl=document.getElementById("ea-type");if(typeEl)acct.type=typeEl.value;
   save();closeModal();toast("Updated "+acct.label);
 }
 
@@ -1818,7 +1820,7 @@ function toastWithAction(msg,btnText,action){
   el.innerHTML='<span style="font-size:13px;flex:1">'+msg+'</span><button style="background:var(--ac,#6c63ff);color:white;border:none;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;white-space:nowrap" onclick="this.parentElement.remove()">'+btnText+'</button>';
   el.querySelector('button').addEventListener('click',function(){el.remove();if(action)action()});
   document.body.appendChild(el);
-  setTimeout(function(){if(el.parentElement)el.remove()},8000);
+  el.onclick=function(){el.remove()};setTimeout(function(){if(el.parentElement)el.remove()},8000);
 }
 
 function saveQuickAdd(){
@@ -1835,18 +1837,19 @@ function saveQuickAdd(){
 
   if(m.qaType==="payment"){
     if(!m.selItem){toast("Pick a card");return}
-    const card=S.data.debts.cards.find(x=>x.id===m.selItem);
+    var card=S.data.debts.cards.find(function(x){return x.id===m.selItem});
     if(!card){toast("Card not found");return}
     card.balance=Math.max(0,card.balance-amt);
     if(!card.payments)card.payments=[];
-    card.payments.push({id:uid(),date:dateStr,isoDate,amount:amt,note:note||"Payment",month:S.month});
+    card.payments.push({id:uid(),date:dateStr,isoDate:isoDate,amount:amt,note:note||"Payment",month:S.month,payFrom:m.payFrom||"other"});
+    // Deduct from source account
+    if(m.payFrom&&m.payFrom!=="none"&&m.payFrom!=="other"){
+      var payAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.payFrom});
+      if(payAcct){var cur=getNWBalance(payAcct,S.month);payAcct.balances[S.month]=cur-amt}
+    }
     S.data.streakDate=new Date().toISOString().split('T')[0];
-  // Deposit income to account if selected
-  if(m.qaType==="income"&&m.depositTo&&m.depositTo!=="none"&&m.depositTo!=="cash"){
-    const acct=S.data.networth?.accounts?.find(a=>a.id===m.depositTo);
-    if(acct){const cur=getNWBalance(acct,S.month);acct.balances[S.month]=cur+amt}
-  }
-    save();closeModal();
+    save();closeModal();checkAndAlert();
+    toast("Payment logged — "+card.name+" now "+fmt(card.balance));
     return;
   }
 
@@ -1869,16 +1872,21 @@ function saveQuickAdd(){
   item.transactions.push(tx);
   // If paid with credit card, increase card balance
   if(m.qaType==="expense"&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
-    const ecard=(S.data.debts?.cards||[]).find(cd=>cd.id===m.paidWith);
+    var ecard=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
     if(ecard)ecard.balance+=amt;
+  }
+  // If paid with debit, deduct from bank account
+  if(m.qaType==="expense"&&m.paidWith==="debit"&&m.debitAccount){
+    var debitAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
+    if(debitAcct){var curD=getNWBalance(debitAcct,S.month);debitAcct.balances[S.month]=curD-amt}
   }
   S.data.streakDate=new Date().toISOString().split('T')[0];
   // Deposit income to account if selected
   if(m.qaType==="income"&&m.depositTo&&m.depositTo!=="none"&&m.depositTo!=="cash"){
-    const acct=S.data.networth?.accounts?.find(a=>a.id===m.depositTo);
-    if(acct){const cur=getNWBalance(acct,S.month);acct.balances[S.month]=cur+amt}
+    var depAcct2=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.depositTo});
+    if(depAcct2){var curI=getNWBalance(depAcct2,S.month);depAcct2.balances[S.month]=curI+amt}
   }
-  save();closeModal();
+  save();closeModal();checkAndAlert();
 }
 
 // ===== COLLAPSE =====
@@ -2433,7 +2441,8 @@ function _render(){
           h+=`<span class="tx-toggle" onclick="S.expanded['${payKey}']=!S.expanded['${payKey}'];render()">${payOpen?'▾ Hide payments':'▸ '+pays.length+' payment'+(pays.length!==1?'s':'')}</span>`;
           if(payOpen){
             h+=`<div class="txlog">`;
-            pays.slice().reverse().forEach(py=>{h+=`<div class="txlog-i"><div class="meta"><span class="dt">${py.date||""}</span><span class="nt">${esc(py.note||"")}</span></div><span class="amt" style="color:var(--gn)">-${fmt(py.amount)}</span></div>`});
+            h+=`<div style="max-height:300px;overflow-y:auto">`;
+        pays.slice().reverse().forEach(py=>{h+=`<div class="txlog-i"><div class="meta"><span class="dt">${py.date||""}</span><span class="nt">${esc(py.note||"")}</span></div><span class="amt" style="color:var(--gn)">-${fmt(py.amount)}</span></div>`});
             h+=`</div>`;
           }
         }
@@ -2543,7 +2552,7 @@ function _render(){
       
       if(allGroupTx.length>0){
         h+=`<div style="background:var(--c1);border-radius:14px;padding:16px;margin-top:8px;border:1px solid var(--bd)">`;
-        h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:14px;font-weight:700">${acctTerm("History")}</span><span style="font-size:12px;color:var(--t3)">${allGroupTx.length} transaction${allGroupTx.length>1?'s':''}</span></div>`;
+        h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:14px;font-weight:700">${acctTerm("History")}</span><span style="font-size:12px;color:var(--t3)">${allGroupTx.length} transaction${allGroupTx.length>1?'s':''}</span></div><div style="max-height:400px;overflow-y:auto">`;
         displayTx.forEach(function(tx){
           if(tx.type==='settlement'){
             h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--bd)">
@@ -2559,6 +2568,7 @@ function _render(){
               <button style="background:none!important;border:none!important;color:var(--t3)!important;font-size:16px;padding:4px!important;min-width:32px!important;min-height:32px!important" onclick="event.stopPropagation();deleteGroupExpense(${tx.idx})">×</button></div></div>`;
           }
         });
+        h+=`</div>`;
         if(allGroupTx.length>10&&!showAll){
           h+=`<button class="add" style="margin-top:8px" onclick="S._groupShowAll=true;render()">Show all ${allGroupTx.length} transactions</button>`;
         } else if(showAll&&allGroupTx.length>10){
@@ -2949,7 +2959,8 @@ function _render(){
     var tE8b=md8.categories.filter(function(c2){return['Savings','Goals'].indexOf(c2.name)===-1}).reduce(function(s,c2){return s+c2.items.reduce(function(ss,x){return ss+txTotal(x)},0)},0);
     if(tE8b>tI8b&&tI8b>0)alerts.push({msg:'Spending exceeds income by '+fmt(tE8b-tI8b),sev:'high',fix:'Review Money Out for areas to cut, or make sure all income is logged in Money In.'});
     if(alerts.length===0){h+=`<div style="font-size:13px;color:var(--gn);padding:8px 0">No alerts this month</div>`}
-    else{alerts.sort(function(a,b){var sv={high:0,med:1,low:2};return(sv[a.sev]||2)-(sv[b.sev]||2)});alerts.forEach(function(al){var col=al.sev==='high'?'var(--rd)':al.sev==='med'?'var(--or)':'var(--t2)';h+=`<div style="border-left:3px solid ${col};padding:10px 14px;margin:6px 0;border-radius:0 10px 10px 0;background:rgba(255,255,255,.02)"><div style="font-size:14px;margin-bottom:${al.fix?'4px':'0'}">${al.msg}</div>${al.fix?'<div style="font-size:12px;color:var(--t3);line-height:1.4">'+al.fix+'</div>':''}</div>`})}
+    else{alerts.sort(function(a,b){var sv={high:0,med:1,low:2};return(sv[a.sev]||2)-(sv[b.sev]||2)});alerts=alerts.filter(function(al){return!_dismissedAlerts[al.msg]});
+    alerts.forEach(function(al,ali){var col=al.sev==='high'?'var(--rd)':al.sev==='med'?'var(--or)':'var(--t2)';h+=`<div style="display:flex;align-items:flex-start;border-left:3px solid ${col};padding:10px 14px;margin:6px 0;border-radius:0 10px 10px 0;background:rgba(255,255,255,.02)"><div style="flex:1"><div style="font-size:14px;margin-bottom:${al.fix?'4px':'0'}">${al.msg}</div>${al.fix?'<div style="font-size:12px;color:var(--t3);line-height:1.4">'+al.fix+'</div>':''}</div><button style="background:none!important;border:none!important;color:var(--t3)!important;font-size:16px!important;padding:2px 6px!important;min-height:auto!important;cursor:pointer;flex-shrink:0" onclick="_dismissedAlerts['${al.msg.replace(/'/g,"\\'")}']=true;render()">×</button></div>`})}
     h+=`<div style="padding:10px 0 4px;border-top:1px solid var(--bd);margin-top:8px"><div style="font-size:12px;color:var(--t3);margin-bottom:6px">Alert settings</div>`;
     h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;flex:1">Budget overage threshold</span><div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:var(--t3)">$</span><input style="width:60px!important;margin:0!important;padding:8px!important;font-size:13px!important;text-align:center" type="number" inputmode="decimal" value="${threshold}" oninput="S.data.alertThreshold=parseFloat(this.value)||100;save()"></div></div>`;
     var utilPct=S.data.alertUtilPct||30;
@@ -2975,13 +2986,39 @@ function _render(){
 
     // ═══ NET WORTH ═══
     var nwAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
-    var nwTotal=nwAccts.reduce(function(s,a){return s+getNWBalance(a,S.month)},0);
-    h+=settSec("nw","🏦","Net Worth",fmt(nwTotal));
-    nwAccts.forEach(function(a,ai){
+    var nwAssets=nwAccts.reduce(function(s,a){return s+Math.max(0,getNWBalance(a,S.month))},0);
+    var nwDebt=(S.data.debts?.cards||[]).reduce(function(s,cd){return s+cd.balance},0);
+    var nwNet=nwAssets-nwDebt;
+    h+=settSec("nw","🏦","Net Worth",fmt(nwNet));
+    // Summary bar
+    h+=`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd)"><span style="font-size:13px;color:var(--t2)">Total in accounts</span><span style="font-size:14px;font-weight:700;color:var(--gn)">${fmt(nwAssets)}</span></div>`;
+    h+=`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd)"><span style="font-size:13px;color:var(--t2)">Total card debt</span><span style="font-size:14px;font-weight:700;color:var(--rd)">-${fmt(nwDebt)}</span></div>`;
+    h+=`<div style="display:flex;justify-content:space-between;padding:10px 0 14px;border-bottom:1px solid var(--bd)"><span style="font-size:14px;font-weight:700">Net worth</span><span style="font-size:16px;font-weight:800;color:${nwNet>=0?'var(--gn)':'var(--rd)'}">${fmt(nwNet)}</span></div>`;
+    // Accounts list
+    h+=`<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Accounts</div>`;
+    var realIdx=0;
+    (S.data.networth?.accounts||[]).forEach(function(a,ai){
+      if(a.label==='Unsorted')return;
       var bal=getNWBalance(a,S.month);
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);cursor:pointer" onclick="S.modal={type:'editacct',ai:${ai}};render()"><span style="font-size:13px">${esc(a.label)} <span style="color:var(--t3);font-size:10px">✎</span></span><span style="font-size:13px;font-weight:600;color:var(--gn)">${fmt(bal)}</span></div>`;
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd)">
+        <div style="flex:1;cursor:pointer" onclick="S.modal={type:'editacct',ai:${ai}};render()">
+          <div style="font-size:14px;font-weight:500">${esc(a.label)}</div>
+          <div style="font-size:11px;color:var(--t3)">${a.type==='asset'?'Asset':'Liability'} · tap to edit</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:15px;font-weight:700;color:${bal>=0?'var(--gn)':'var(--rd)'}">${fmt(bal)}</div>
+          <button style="font-size:11px!important;color:var(--ac)!important;min-height:auto!important;padding:2px 0!important" onclick="event.stopPropagation();S.modal={type:'nwhistory',ai:${ai}};render()">history</button>
+        </div>
+      </div>`;
     });
-    h+=`<button class="add" style="margin-top:8px" onclick="S.modal={type:'nwnew'};render()">+ Add account</button>`;
+    // Cards shown as liabilities
+    if((S.data.debts?.cards||[]).length>0){
+      h+=`<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Credit card debt</div>`;
+      (S.data.debts?.cards||[]).forEach(function(cd){
+        h+=`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd)"><span style="font-size:14px">${esc(cd.name)}</span><span style="font-size:15px;font-weight:700;color:var(--rd)">-${fmt(cd.balance)}</span></div>`;
+      });
+    }
+    h+=`<button class="add" style="margin-top:10px" onclick="S.modal={type:'nwnew'};render()">+ Add account</button>`;
     h+=`</div></div>`;
 
     // ═══ DATA ═══
@@ -3264,6 +3301,17 @@ function renderModal(){
       h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px;display:block">Paid with</label><div class="qa-cats">`;
       h+=`<button class="qa-cat ${curPay==='cash'?'on':''}" onclick="saveModalInputs();S.modal.paidWith='cash';render()">Cash</button>`;
       h+=`<button class="qa-cat ${curPay==='debit'?'on':''}" onclick="saveModalInputs();S.modal.paidWith='debit';render()">Debit</button>`;
+      if(curPay==='debit'){
+        var debitAccts2=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+        if(debitAccts2.length>0){
+          var curDebitAcct=m.debitAccount||'';
+          h+=`</div><div style="margin-top:6px;margin-bottom:6px"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">From account</label><div class="qa-cats">`;
+          debitAccts2.forEach(function(a){
+            h+=`<button class="qa-cat ${curDebitAcct===a.id?'on':''}" style="font-size:12px;padding:6px 10px" onclick="saveModalInputs();S.modal.debitAccount='${a.id}';render()">${esc(a.label)}</button>`;
+          });
+          h+=`</div></div><div class="qa-cats">`;
+        }
+      }
       expCards.forEach(cd=>{
         h+=`<button class="qa-cat ${curPay===cd.id?'on':''}" onclick="saveModalInputs();S.modal.paidWith='${cd.id}';render()">${esc(cd.name)}</button>`;
       });
@@ -3290,15 +3338,37 @@ function renderModal(){
       h+=`</div></div>`;
     } else if(qaType==="payment"){
       if(!hasCards){h+=`<div style="text-align:center;padding:20px"><div style="color:var(--t3);margin-bottom:10px">No cards yet</div><button class="add" onclick="openInlineDebt()">+ Add a card</button></div>`}
-      const pcards=S.data.debts?.cards||[];
+      var pcards=S.data.debts?.cards||[];
       h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Which card?</label><div class="qa-cats">`;
       pcards.forEach(cd=>{
         h+=`<button class="qa-cat ${selItem===cd.id?'on':''}" onclick="saveModalInputs();S.modal.selItem='${cd.id}';render()">${esc(cd.name)} <span style="font-size:11px;color:var(--rd)">${fmt(cd.balance)}</span></button>`;
       });
       h+=`</div>`;
+      // Pay from which account
+      var payAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+      var curPayFrom=m.payFrom||'none';
+      h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px;display:block">Pay from</label><div class="qa-cats">`;
+      payAccts.forEach(function(a){
+        h+=`<button class="qa-cat ${curPayFrom===a.id?'on':''}" onclick="saveModalInputs();S.modal.payFrom='${a.id}';render()">${esc(a.label)} <span style="font-size:11px;color:var(--gn)">${fmt(getNWBalance(a,S.month))}</span></button>`;
+      });
+      h+=`<button class="qa-cat ${curPayFrom==='other'?'on':''}" onclick="saveModalInputs();S.modal.payFrom='other';render()">Other / cash</button>`;
+      h+=`<button class="qa-cat" style="border-style:dashed;color:var(--ac)" onclick="openInlineAccount('payment')">+ Add account</button>`;
+      h+=`</div></div>`;
       if(selItem){
-        const selCard=pcards.find(x=>x.id===selItem);
-        if(selCard){const previewAmt=parseFloat(m._amt)||0;h+=`<div id="bal-preview" style="font-size:12px;color:var(--t2);margin-top:4px;padding:6px 10px;background:var(--bg);border-radius:8px">Balance after: <b style="color:var(--gn)">${fmt(Math.max(0,selCard.balance-previewAmt))}</b></div>`;}
+        var selCard=pcards.find(function(x){return x.id===selItem});
+        var previewAmt=parseFloat(m._amt)||0;
+        if(selCard){
+          h+=`<div style="font-size:12px;color:var(--t2);margin-top:8px;padding:10px;background:var(--bg);border-radius:8px">`;
+          h+=`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Card balance after:</span><b style="color:var(--gn)">${fmt(Math.max(0,selCard.balance-previewAmt))}</b></div>`;
+          if(curPayFrom&&curPayFrom!=='none'&&curPayFrom!=='other'){
+            var payFromAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===curPayFrom});
+            if(payFromAcct){
+              var afterBal=getNWBalance(payFromAcct,S.month)-previewAmt;
+              h+=`<div style="display:flex;justify-content:space-between"><span>${esc(payFromAcct.label)} after:</span><b style="color:${afterBal>=0?'var(--gn)':'var(--rd)'}">${fmt(afterBal)}</b></div>`;
+            }
+          }
+          h+=`</div>`;
+        }
       }
     }
     if(qaType==="deposit"){
@@ -3622,14 +3692,40 @@ function renderModal(){
       <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="dg" onclick="resetMonthTxs()">Reset</button></div>`;
   }
 
+  else if(m.type==="nwhistory"){
+    var acctH=S.data.networth.accounts[m.ai];
+    if(acctH){
+      h+=`<h3>${esc(acctH.label)} — History</h3>`;
+      var bals=acctH.balances||{};
+      var months2=Object.keys(bals).sort().reverse();
+      h+=`<div style="max-height:400px;overflow-y:auto">`;
+      if(months2.length===0){h+=`<div style="font-size:13px;color:var(--t3);padding:12px 0">No balance history yet</div>`}
+      else{
+        months2.forEach(function(mk2){
+          var prev=months2[months2.indexOf(mk2)+1];
+          var diff=prev?bals[mk2]-(bals[prev]||0):0;
+          var diffStr=prev?(diff>=0?'+':'')+fmt(diff):'';
+          h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd)"><div><div style="font-size:13px">${monthLabel(mk2)}</div>${diffStr?'<div style="font-size:11px;color:'+(diff>=0?'var(--gn)':'var(--rd)')+'">'+diffStr+' from prior</div>':''}</div><span style="font-size:14px;font-weight:600">${fmt(bals[mk2])}</span></div>`;
+        });
+      }
+      h+=`</div>`;
+      h+=`<div class="mbs"><button class="sv" onclick="closeModal()">Done</button></div>`;
+    }
+  }
   else if(m.type==="editacct"){
-    const acct3=S.data.networth.accounts[m.ai];
+    var acct3=S.data.networth.accounts[m.ai];
     if(acct3){
-      h+=`<h3>Edit account</h3>
-        <label>Account name</label><input id="ea-name" class="ob-input" style="text-align:left;margin:4px 0" maxlength="40" value="${esc(acct3.label)}">
-        <label>Current balance</label><input id="ea-bal" class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="decimal" value="${getNWBalance(acct3,S.month)}">
+      var acctBal3=getNWBalance(acct3,S.month);
+      h+=`<h3>${esc(acct3.label)}</h3>
+        <div style="text-align:center;padding:12px 0;margin-bottom:12px;background:var(--c1);border-radius:12px;border:1px solid var(--bd)">
+          <div style="font-size:11px;color:var(--t3)">Current balance</div>
+          <div style="font-size:28px;font-weight:800;color:${acctBal3>=0?'var(--gn)':'var(--rd)'}">${fmt(acctBal3)}</div>
+        </div>
+        <label>Account name</label><input id="ea-name" maxlength="40" value="${esc(acct3.label)}">
+        <label>Update balance</label><input id="ea-bal" type="number" inputmode="decimal" value="${acctBal3}" placeholder="Current balance">
+        <label>Account type</label><select id="ea-type"><option value="asset" ${acct3.type!=='liability'?'selected':''}>Asset (bank, savings, investment)</option><option value="liability" ${acct3.type==='liability'?'selected':''}>Liability (loan, debt)</option></select>
         <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button>
-        ${acct3.label!=='Unsorted'?'<button class="cn" style="color:var(--rd);border-color:var(--rd)" onclick="customConfirm(\'Remove this account?\',()=>{S.data.networth.accounts.splice('+m.ai+',1);save();closeModal()})">Delete</button>':''}
+        ${acct3.label!=='Unsorted'?'<button class="cn" style="color:var(--rd)!important;border-color:var(--rd)!important" onclick="customConfirm(\'Remove '+esc(acct3.label)+'?\',function(){S.data.networth.accounts.splice('+m.ai+',1);save();closeModal()})">Delete</button>':''}
         <button class="sv" onclick="saveEditAcct()">Save</button></div>`;
     }
   }
@@ -3696,16 +3792,21 @@ function saveTx(){
   item.transactions.push(tx);
   // If paid with credit card, increase card balance
   if(m.qaType==="expense"&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
-    const ecard=(S.data.debts?.cards||[]).find(cd=>cd.id===m.paidWith);
+    var ecard=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
     if(ecard)ecard.balance+=amt;
+  }
+  // If paid with debit, deduct from bank account
+  if(m.qaType==="expense"&&m.paidWith==="debit"&&m.debitAccount){
+    var debitAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
+    if(debitAcct){var curD=getNWBalance(debitAcct,S.month);debitAcct.balances[S.month]=curD-amt}
   }
   S.data.streakDate=new Date().toISOString().split('T')[0];
   // Deposit income to account if selected
   if(m.qaType==="income"&&m.depositTo&&m.depositTo!=="none"&&m.depositTo!=="cash"){
-    const acct=S.data.networth?.accounts?.find(a=>a.id===m.depositTo);
-    if(acct){const cur=getNWBalance(acct,S.month);acct.balances[S.month]=cur+amt}
+    var depAcct2=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.depositTo});
+    if(depAcct2){var curI=getNWBalance(depAcct2,S.month);depAcct2.balances[S.month]=curI+amt}
   }
-  save();closeModal();
+  save();closeModal();checkAndAlert();
 }
 
 function removeTxById(itemId,catId,txId){
@@ -4343,7 +4444,7 @@ const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true
   } else if(step===6){
     if(!S.obCards)S.obCards=[];
     var hasCards6=S.obCards.length>0;
-    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px;align-items:stretch">${backBtn(5)}<div class="ob-step" style="text-align:center">Step 4 of 4</div><h2 style="text-align:center">Credit cards</h2><p style="text-align:center;font-size:13px;color:var(--t2)">Add any cards you're carrying a balance on.</p>`;
+    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px;align-items:stretch">${backBtn(5)}<div class="ob-step" style="text-align:center">Step 4 of 4</div><h2 style="text-align:center">Cards & accounts</h2><p style="text-align:center;font-size:13px;color:var(--t2)">Add credit cards and bank accounts.</p>`;
     // Show added cards
     if(hasCards6){
       h+=`<div style="max-width:360px;margin:12px auto;width:100%">`;
@@ -4371,13 +4472,28 @@ const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true
     h+=`<input id="ob-cs" type="number" inputmode="numeric" placeholder="Statement date (day, e.g. 15)" min="1" max="31" style="margin-top:8px!important">`;
     h+=`<button class="ob-btn sec" style="width:100%;margin-top:10px" onmousedown="event.preventDefault();addObCard()">+ Add this card</button>`;
     h+=`</div>`;
+    // Bank accounts section
+    if(!S.obAccounts||S.obAccounts.length===0)S.obAccounts=[{label:"Checking",balance:0},{label:"Savings",balance:0}];
+    h+=`<div style="max-width:360px;margin:16px auto 0;width:100%;background:var(--c1);border-radius:14px;padding:16px;border:1px solid var(--bd)">`;
+    h+=`<div style="font-size:14px;font-weight:600;margin-bottom:10px">🏦 Bank accounts</div>`;
+    h+=`<div style="font-size:12px;color:var(--t2);margin-bottom:10px">Where does your money live?</div>`;
+    S.obAccounts.forEach(function(oa,oai){
+      h+=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="ob-acct-name-${oai}" maxlength="30" value="${esc(oa.label)}" placeholder="Account name" style="flex:1" oninput="S.obAccounts[${oai}].label=this.value">
+        <div style="position:relative;flex:0 0 110px"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:12px">$</span>
+        <input id="ob-acct-bal-${oai}" type="number" inputmode="decimal" value="${oa.balance||''}" placeholder="Balance" style="padding-left:24px!important" oninput="S.obAccounts[${oai}].balance=parseFloat(this.value)||0"></div>
+        ${S.obAccounts.length>1?'<button style="color:var(--t3)!important;font-size:18px!important;min-height:32px!important;min-width:32px!important;padding:0!important" onclick="S.obAccounts.splice('+oai+',1);render()">×</button>':''}
+      </div>`;
+    });
+    h+=`<button class="add" onclick="S.obAccounts.push({label:'',balance:0});render()">+ Add account</button>`;
+    h+=`</div>`;
+
     // Next / Skip
+    var hasAnything=hasCards6||S.obAccounts.some(function(a){return a.label&&a.balance>0});
     h+=`<div style="margin-top:16px;text-align:center">`;
-    if(hasCards6){
-      h+=`<button class="ob-btn" onmousedown="event.preventDefault();S.obStep=10;render()">Next</button>`;
-    } else {
-      h+=`<button class="ob-btn" style="opacity:0.35;cursor:default" disabled>Next</button>`;
-      h+=`<div style="margin-top:8px"><button class="ob-skip" onmousedown="event.preventDefault();S.obStep=10;render()">Skip — I don't have credit cards</button></div>`;
+    h+=`<button class="ob-btn" onmousedown="event.preventDefault();S.obStep=10;render()">Next</button>`;
+    if(!hasCards6&&!hasAnything){
+      h+=`<div style="margin-top:8px"><button class="ob-skip" onmousedown="event.preventDefault();S.obStep=10;render()">Skip</button></div>`;
     }
     h+=`</div></div>`;
   } else if(step===7){
@@ -4469,6 +4585,39 @@ async function startOnboardFinish(){
     S.data.quickButtons=S._existingQuickBtns||S.data.quickButtons;
     S.data.streakDate=S._existingStreak||S.data.streakDate;
     S.data.catEmojis=S._existingEmojis||S.data.catEmojis;
+    // Regenerate current month from new template, preserving transaction history
+    var curMk=mk();
+    var oldMonth=S.data.months[curMk];
+    var newMonth=genMonth(curMk);
+    if(oldMonth){
+      // Carry over existing transactions to matching items in new template
+      (oldMonth.income||[]).forEach(function(oldInc){
+        var match=newMonth.income.find(function(ni){return ni.label===oldInc.label});
+        if(match&&oldInc.transactions&&oldInc.transactions.length>0){
+          match.transactions=oldInc.transactions;
+        }
+      });
+      (oldMonth.categories||[]).forEach(function(oldCat){
+        var newCat=(newMonth.categories||[]).find(function(nc){return nc.name===oldCat.name});
+        if(newCat){
+          (oldCat.items||[]).forEach(function(oldItem){
+            var newItem=newCat.items.find(function(ni){return ni.label===oldItem.label});
+            if(newItem&&oldItem.transactions&&oldItem.transactions.length>0){
+              newItem.transactions=oldItem.transactions;
+              if(oldItem._balance)newItem._balance=oldItem._balance;
+              if(oldItem._startBalance)newItem._startBalance=oldItem._startBalance;
+              if(oldItem._apr)newItem._apr=oldItem._apr;
+            }
+          });
+        }
+      });
+    }
+    S.data.months[curMk]=newMonth;
+    // Also update template in all future months
+    Object.keys(S.data.months).forEach(function(mk2){
+      if(mk2>curMk)S.data.months[mk2]=genMonth(mk2);
+    });
+
     delete S._reOnboard;delete S._existingMonths;delete S._existingGoals;
     delete S._existingGroups;delete S._existingNetworth;delete S._existingNotes;
     delete S._existingQuickBtns;delete S._existingStreak;delete S._existingEmojis;
