@@ -1769,8 +1769,10 @@ function openQuickAdd(){S._modalFresh=true;
 }
 
 function saveDeposit(){
-  const m=S.modal;
-  const amt=parseFloat(document.getElementById("m-inp")?.value)||0;
+  var m=S.modal;
+  saveModalInputs();
+  var depInp=document.getElementById("m-inp");
+  var amt=parseFloat(depInp?depInp.value:'')||parseFloat(m._amt)||0;
   if(!amt){toast("Enter an amount");return}
   const note=document.getElementById("m-note")?.value?.trim()||"Cash deposit";
   if(!m.depositAcct){toast("Pick an account");return}
@@ -1823,11 +1825,15 @@ function toastWithAction(msg,btnText,action){
 }
 
 function saveQuickAdd(){
-  const m=S.modal;
-  const amt=parseFloat(document.getElementById("m-inp").value)||0;
-  if(amt===0){closeModal();return}
-  const note=document.getElementById("m-note").value.trim();
-  const tagsRaw=document.getElementById("m-tags").value.trim();
+  var m=S.modal;
+  saveModalInputs();
+  var inpEl=document.getElementById("m-inp");
+  var amt=parseFloat(inpEl?inpEl.value:'')||parseFloat(m._amt)||0;
+  if(amt===0){toast("Enter an amount");return}
+  var noteEl=document.getElementById("m-note");
+  var note=noteEl?noteEl.value.trim():(m._note||'');
+  var tagsEl=document.getElementById("m-tags");
+  var tagsRaw=tagsEl?tagsEl.value.trim():'';
   const tags=tagsRaw?tagsRaw.split(",").map(t=>t.trim()).filter(Boolean):[];
   const dateInput=document.getElementById('m-date')?.value;
   const d=dateInput?new Date(dateInput+'T12:00:00'):new Date();
@@ -3785,8 +3791,10 @@ function saveTx(){
   const m=S.modal,md=cm();
   const amt=parseFloat(document.getElementById("m-inp").value)||0;
   if(amt===0){closeModal();return}
-  const note=document.getElementById("m-note").value.trim();
-  const tagsRaw=document.getElementById("m-tags").value.trim();
+  var noteEl=document.getElementById("m-note");
+  var note=noteEl?noteEl.value.trim():(m._note||'');
+  var tagsEl=document.getElementById("m-tags");
+  var tagsRaw=tagsEl?tagsEl.value.trim():'';
   const tags=tagsRaw?tagsRaw.split(",").map(t=>t.trim()).filter(Boolean):[];
   const d=new Date();
   const tx={id:uid(),date:(d.getMonth()+1)+"/"+d.getDate(),isoDate:d.toISOString().split('T')[0],amount:amt,note,tags,auto:false};
