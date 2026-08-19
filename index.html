@@ -2323,8 +2323,7 @@ function _render(){
       const totalBal=cards.reduce((s,x)=>s+x.balance,0);
       const totalLim=cards.reduce((s,x)=>s+(x.limit||0),0);
       const totalUtil=totalLim>0?Math.round(totalBal/totalLim*100):0;
-      // Sanity check minimums: real min payments are typically max($25, 1-3% of balance)
-      cards.forEach(cd2=>{const realMin=Math.max(25,Math.round(cd2.balance*0.01));if(cd2.minPayment>cd2.balance)cd2.minPayment=cd2.balance;if(cd2.minPayment>cd2.balance*0.15)cd2.minPayment=realMin;if(cd2.balance>0&&cd2.minPayment<=0)cd2.minPayment=realMin});
+      // Use user-entered minimums as-is
       var totalMin=cards.reduce(function(s,x){var mp=x.minPayment!=null?x.minPayment:25;return s+Math.min(mp,x.balance)},0);
       const monthlyInterest=cards.reduce((s,x)=>s+x.balance*(x.apr/100/12),0);
       const weightedApr=totalBal>0?cards.reduce((s,x)=>s+x.apr*(x.balance/totalBal),0):0;
