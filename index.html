@@ -558,6 +558,19 @@ function save(){
   _saveTimer=setTimeout(_doSave,500);
 }
 function saveNow(){clearTimeout(_saveTimer);_doSave()}
+function startOver(){
+  var code=localStorage.getItem("bt-sync")||S.pin;
+  if(db&&code){
+    sha(code).then(function(h){
+      db.ref("budgets/"+h).remove();
+      if(S.data&&S.data.userName)db.ref("usernames/"+S.data.userName.toLowerCase()).remove();
+      localStorage.clear();location.reload();
+    }).catch(function(){localStorage.clear();location.reload()});
+  } else {
+    localStorage.clear();location.reload();
+  }
+}
+
 function forceSync(){
   if(!db){toast("No Firebase connection");return}
   if(!S.data){toast("No data to sync");return}
@@ -2594,7 +2607,7 @@ function _render(){
       <button class="add" onclick="S.modal={type:'changeuser'};render()">Change username</button>
         <button class="add" onclick="S.modal={type:'changepass'};render()">Change password</button>
       <button class="add" style="color:var(--rd);border-color:var(--rd)" onclick="customConfirm('Log out? You will need your sync code to reconnect.',()=>{localStorage.removeItem('bt-sync');location.reload()})">Log out</button>
-      <button class="add" style="color:var(--rd);border-color:var(--rd);margin-top:4px" onclick="customConfirm('Start over? This will erase ALL your data and reset the app. This cannot be undone.',()=>{localStorage.clear();location.reload()})">Start over</button>
+      <button class="add" style="color:var(--rd);border-color:var(--rd);margin-top:4px" onclick="customConfirm('Start over? This will erase ALL your data from this device and the cloud. This cannot be undone.',function(){startOver()})">Start over</button>
     </div></div>`;
   }
 
