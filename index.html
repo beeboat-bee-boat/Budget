@@ -564,34 +564,33 @@ function signOut(){
 }
 
 function startOver(){
-  // Stop all saves and listeners immediately
+  // Stop ALL saves and listeners immediately
   clearTimeout(_saveTimer);
   if(dbRef){try{dbRef.off()}catch(e){}}
   dbRef=null;
+  S.data=null;
+
+  // Clear local storage FIRST so nothing can restore
+  localStorage.clear();
+  sessionStorage.clear();
+
   // Show wiping message
   try{document.getElementById('app').innerHTML='<div style="padding:60px 20px;text-align:center;font-family:sans-serif;color:#8b8ba3"><div style="font-size:24px;margin-bottom:12px">Clearing data...</div></div>'}catch(e){}
 
-  // Delete Firebase data
+  // Delete Firebase data and sign out
   var uid2=S.firebaseUser?S.firebaseUser.uid:null;
-  var deletePromise=Promise.resolve();
+  var step1=Promise.resolve();
   if(db&&uid2){
-    deletePromise=db.ref("budgets/"+uid2).remove().then(function(){
-      // Also clear the local backup
-      return db.ref("budgets/"+uid2).once("value");
-    }).then(function(snap){
-      if(snap.exists())return db.ref("budgets/"+uid2).set(null);
-    }).catch(function(){});
+    step1=db.ref("budgets/"+uid2).set(null).catch(function(){});
   }
-
-  deletePromise.then(function(){
-    localStorage.clear();
-    sessionStorage.clear();
+  step1.then(function(){
     if(auth)return auth.signOut();
+  }).then(function(){
+    // Double-check it's gone
+    if(db&&uid2)return db.ref("budgets/"+uid2).set(null);
   }).then(function(){
     window.location.reload();
   }).catch(function(){
-    localStorage.clear();
-    if(auth)auth.signOut().catch(function(){});
     window.location.reload();
   });
 }
