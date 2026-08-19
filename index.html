@@ -543,13 +543,46 @@ function linkGoogle(){
     var user=result.user;
     S.firebaseUser=user;
     S._localMode=false;
-    // Save existing local data to Firebase
     dbRef=db.ref("budgets/"+user.uid);
-    dbRef.set(S.data).then(function(){
+    // Check if Firebase already has data
+    dbRef.once("value").then(function(snap){
+      if(snap.exists()){
+        var remoteData=snap.val();
+        var remoteTmpl=remoteData.template||{};
+        var remoteHasSetup=(remoteTmpl.income&&remoteTmpl.income.length>0)||(remoteTmpl.categories&&remoteTmpl.categories.length>2);
+        if(remoteHasSetup){
+          // Firebase has real data — compare timestamps
+          var remoteTime=remoteData._lastModified||0;
+          var localTime=S.data._lastModified||0;
+          if(remoteTime>localTime){
+            // Remote is newer — use it
+            S.data=remoteData;
+            toast("Signed in — loaded your existing data from "+user.email);
+          } else {
+            // Local is newer — ask user
+            customConfirm("Found existing data on "+user.email+". Keep cloud data or replace with local data?",function(){
+              // Replace with local
+              dbRef.set(S.data);
+              toast("Linked — pushed local data to "+user.email);
+            });
+            // Default: keep remote
+            S.data=remoteData;
+            toast("Signed in — loaded cloud data. Tap 'Start over' if you want to use local data instead.");
+          }
+        } else {
+          // Firebase has empty/default data — push local
+          dbRef.set(S.data);
+          toast("Linked to "+user.email);
+        }
+      } else {
+        // No Firebase data — push local
+        dbRef.set(S.data);
+        toast("Linked to "+user.email);
+      }
+      ensureStructure();
       localStorage.removeItem("bt-local-data");
       dbRef.on("value",function(s){if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){}}});
       render();
-      toast("Linked! Data synced to "+user.email);
     });
   }).catch(function(e){
     if(e.code==='auth/popup-blocked'){auth.signInWithRedirect(provider)}
