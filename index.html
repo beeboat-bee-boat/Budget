@@ -182,10 +182,6 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .debt-card .dc-bal:active{background:var(--c2)}
 .debt-card .dc-details{display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--t2)}
 .debt-card .dc-pay{margin-top:8px;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:13px;color:var(--gn);font-weight:600}
-.debt-strat{display:flex;gap:0;border-radius:10px;overflow:hidden;border:1px solid var(--bd);margin-bottom:12px}
-.debt-strat div{flex:1;padding:8px;font-size:12px;font-weight:600;background:var(--c1);color:var(--t2);min-height:38px}
-.debt-strat div.on{background:var(--ac);color:#fff}
-.debt-strat div:active{opacity:.8}
 .debt-summary{background:var(--c1);border-radius:14px;padding:14px 16px;margin-top:10px;box-shadow:var(--sh)}
 .debt-summary .ds-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
 .debt-summary .ds-label{color:var(--t2)}
@@ -542,6 +538,63 @@ function getNWBalance(account,month){
   return last;
 }
 // ===== MODAL & NAV =====
+function saveBudgetInputs(){
+  if(!S.obBudgets)return;
+  document.querySelectorAll('[data-bi]').forEach(el=>{
+    const[cat,idx,field]=el.dataset.bi.split('|');
+    if(S.obBudgets[cat]&&S.obBudgets[cat][idx]){
+      if(field==='label')S.obBudgets[cat][idx].label=el.value;
+      else S.obBudgets[cat][idx].amount=parseFloat(el.value)||0;
+    }
+  });
+}
+
+function updateSavingsLeft(){
+  const el=document.getElementById("savings-left");if(!el)return;
+  const amts=S.obIncomeAmts||{};
+  const commAlloc=amts.comm?(amts.comm*(S.obCommPct||50)/100):0;
+  const bp=(amts.salary||amts.base||amts.hourly||amts.freelance||0)+commAlloc;
+  const ft=(S.obFixed||[]).filter(f=>f.on).reduce((s,f)=>s+f.amount,0);
+  const flex=Math.max(0,bp-ft-(S.obSavingsGoal||0));
+  el.innerHTML='Left for spending: <b style="color:'+(flex>0?'var(--gn)':'var(--rd)')+'">'+fmt(flex)+'</b>';
+}
+
+function saveFixedInputs(){
+  if(!S.obFixed)return;
+  S.obFixed.forEach((f,fi)=>{
+    if(f.on){
+      const el=document.getElementById("fixed-amt-"+fi);
+      if(el)f.amount=parseFloat(el.value)||0;
+    }
+  });
+}
+
+function updateFixedSummary(){
+  const el=document.getElementById("fixed-summary");if(!el)return;
+  const amts=S.obIncomeAmts||{};
+  const commAlloc=amts.comm?(amts.comm*(S.obCommPct||50)/100):0;
+  const bp=(amts.salary||amts.base||amts.hourly||amts.freelance||0)+commAlloc;
+  const ft=(S.obFixed||[]).filter(f=>f.on).reduce((s,f)=>s+f.amount,0);
+  const left=bp-ft;
+  el.innerHTML='Take-home: '+fmt(bp)+' · Fixed: '+fmt(ft)+' · <span style="color:'+(left>=0?'var(--gn)':'var(--rd)')+'">Left: '+fmt(left)+'</span>';
+}
+
+function updateBalPreview(){
+  const el=document.getElementById("bal-preview");if(!el||!S.modal)return;
+  const amt=parseFloat(S.modal._amt)||0;
+  const cards2=S.data.debts?.cards||[];
+  const card=cards2.find(cd=>cd.id===S.modal.selItem);
+  if(card)el.innerHTML='Balance after: <b style="color:var(--gn)">'+fmt(Math.max(0,card.balance-amt))+'</b>';
+}
+
+function saveModalInputs(){
+  if(!S.modal)return;
+  const inp=document.getElementById("m-inp");if(inp)S.modal._amt=inp.value;
+  const note=document.getElementById("m-note");if(note)S.modal._note=note.value;
+  const tags=document.getElementById("m-tags");if(tags)S.modal._tags=tags.value;
+  const label=document.getElementById("m-label");if(label)S.modal._label=label.value;
+}
+
 function openModal(cfg){S.modal=cfg;render();setTimeout(()=>{const i=document.getElementById("m-inp");if(i){i.focus();i.select()}},60)}
 function closeModal(){S.modal=null;render()}
 function nav(dir){const d=new Date(S.month+"-15");d.setMonth(d.getMonth()+dir);S.month=mk(d);render()}
@@ -589,6 +642,7 @@ function removeDebt(ci){
 }
 
 function toggleSplitMember(idx){
+  saveModalInputs();
   const grp=S.data.groups[S.activeGroup];if(!grp)return;
   const gd=groupDatas[grp.code]||{members:{}};
   const members=Object.keys(gd.members||{}).filter(x=>x!==grp.name);
@@ -726,6 +780,12 @@ function processVoice(text){
   S.modal.qaType=parsed.type;
   S.modal.selCat=parsed.catId||null;
   S.modal.selItem=parsed.itemId||null;
+  // Default Commissions for income if not matched
+  if(parsed.type==="income"&&!parsed.itemId){
+    const md2=cm();
+    const commSrc=md2.income.find(i=>i.label.toLowerCase().includes("commission"));
+    if(commSrc)S.modal.selItem=commSrc.id;
+  }
   render();
   // Fill in the fields after render
   setTimeout(()=>{
@@ -737,6 +797,21 @@ function processVoice(text){
 
 function parseVoice(lower,original){
   const result={type:"expense",amount:0,note:"",catId:null,itemId:null};
+
+  // Preprocess: strip commas from numbers ("1,000" → "1000")
+  lower=lower.replace(/(\d),(\d)/g,"$1$2");
+  original=original.replace(/(\d),(\d)/g,"$1$2");
+
+  // Convert word numbers to digits
+  const wordNums={"zero":0,"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,"nineteen":19,"twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60,"seventy":70,"eighty":80,"ninety":90};
+  // "a thousand" / "a hundred" / "a grand"
+  lower=lower.replace(/\ba\s+(thousand|grand)\b/g,"1000");
+  lower=lower.replace(/\ba\s+hundred\b/g,"100");
+  // "five hundred" "two thousand" etc
+  lower=lower.replace(new RegExp("\\b("+Object.keys(wordNums).join("|")+")\\s+(thousand|grand)\\b","g"),(m,w)=>String((wordNums[w]||0)*1000));
+  lower=lower.replace(new RegExp("\\b("+Object.keys(wordNums).join("|")+")\\s+hundred\\b","g"),(m,w)=>String((wordNums[w]||0)*100));
+  // Standalone word numbers
+  lower=lower.replace(new RegExp("\\b("+Object.keys(wordNums).join("|")+")\\b","g"),(m,w)=>String(wordNums[w]||0));
 
   // Detect type
   if(lower.match(/\b(earned|made|got paid|received|income|commission|paycheck|salary)\b/))result.type="income";
@@ -861,7 +936,7 @@ function saveQuickButton(){
 
 // ===== QUICK ADD =====
 function openQuickAdd(){
-  S.modal={type:"quickadd",qaType:"expense",selCat:null,selItem:null};
+  S.modal={type:"quickadd",qaType:S.view==="cards"?"payment":"expense",selCat:null,selItem:null};
   render();
   setTimeout(()=>{const i=document.getElementById("m-inp");if(i){i.focus()}},60);
 }
@@ -903,7 +978,13 @@ function saveQuickAdd(){
 
   if(!item){toast("Item not found");return}
   if(!item.transactions)item.transactions=[];
+  tx.paidWith=m.paidWith||"cash";
   item.transactions.push(tx);
+  // If paid with credit card, increase card balance
+  if(m.qaType==="expense"&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
+    const ecard=(S.data.debts?.cards||[]).find(cd=>cd.id===m.paidWith);
+    if(ecard)ecard.balance+=amt;
+  }
   S.data.streakDate=new Date().toISOString().split('T')[0];
   save();closeModal();
 }
@@ -1033,7 +1114,7 @@ function render(){
       md.categories.forEach(c2=>c2.items.filter(i=>i.recurring).forEach(i=>{recurItems.push({label:i.label,amount:i.budgeted,cat:c2.name})}));
       md.income.filter(i=>i.recurring).forEach(i=>{recurItems.push({label:i.label,amount:i.budgeted,cat:"Income"})});
       // Also card statement dates
-      (S.data.debts?.cards||[]).filter(cd=>cd.stmtDate).forEach(cd=>{recurItems.push({label:cd.name+" statement",amount:cd.minPayment,cat:"Card",day:cd.stmtDate})});
+      (S.data.debts?.cards||[]).filter(cd=>cd.stmtDate&&cd.balance>0).forEach(cd=>{recurItems.push({label:cd.name+" payment due",amount:Math.min(cd.balance,cd.minPayment||cd.balance),cat:"Card",day:cd.stmtDate})});
 
       if(recurItems.length>0){
         const billKey="bills-main";
@@ -1135,7 +1216,7 @@ function render(){
       const extra=Math.max(0,suggestedTotal-totalMin);
 
       // Strategy
-      const strat=S.data.debts?.strategy||"avalanche";
+      const strat="avalanche";
       const sorted=[...cards].map((cd2,i)=>({...cd2,idx:i}));
       if(strat==="avalanche")sorted.sort((a,b)=>b.apr-a.apr);
       else sorted.sort((a,b)=>a.balance-b.balance);
@@ -1205,14 +1286,40 @@ function render(){
       cuttable.sort((a,b)=>b.amount-a.amount);
 
       // Timeline picker
+      // Check if full payoff is affordable
+      const savingsBudget=md3.categories.filter(c2=>c2.name.toLowerCase().includes("saving")).reduce((s,c2)=>s+c2.items.reduce((ss,x)=>ss+x.budgeted,0),0);
+      const availAfterSavings=available;
+      const canPayFullNow=totalBal>0&&totalBal<=availAfterSavings;
+      const canPayFullSoon=totalBal>0&&totalBal<=availAfterSavings*3; // within 3 months
+
+      if(canPayFullNow){
+        h+=`<div style="padding:12px;background:rgba(26,143,92,.08);border:1px solid rgba(26,143,92,.2);border-radius:14px;margin-bottom:12px">
+          <div style="font-size:16px;font-weight:700;color:var(--gn);margin-bottom:4px">💪 Pay it all off this month</div>
+          <div style="font-size:13px;color:var(--t2);line-height:1.5">You have ${fmt(available)}/mo available and only owe ${fmt(totalBal)}. Pay the full balance and stop paying ${fmt(monthlyInterest)}/mo in interest.${savingsBudget>0?'<br><br>Your '+fmt(savingsBudget)+'/mo savings goal is still covered.':''}</div>
+          <div style="margin-top:8px;font-size:12px">`;
+        cards.forEach(cd2=>{if(cd2.balance>0)h+=`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${esc(cd2.name)}</span><b>${fmt(cd2.balance)}</b></div>`});
+        h+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--bd);margin-top:4px;font-weight:700"><span>Total</span><span>${fmt(totalBal)}</span></div>`;
+        h+=`</div></div>`;
+      } else if(canPayFullSoon){
+        const moNeeded=Math.ceil(totalBal/availAfterSavings);
+        h+=`<div style="padding:12px;background:rgba(34,102,204,.06);border:1px solid rgba(34,102,204,.15);border-radius:14px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;color:var(--ac);margin-bottom:4px">Almost there — ${moNeeded} month${moNeeded>1?'s':''} to freedom</div>
+          <div style="font-size:12px;color:var(--t2)">At ${fmt(available)}/mo, you can clear ${fmt(totalBal)} in ${moNeeded} months and save ${fmt(monthlyInterest*moNeeded)} in interest.${savingsBudget>0?' Savings goal still intact.':''}</div>
+        </div>`;
+      }
+
       h+=`<div style="padding:10px 0 8px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:8px">Pay off in</div>
-        <div style="display:flex;gap:4px;margin-bottom:10px">`;
-      [6,12,18,24].forEach(mo=>{
-        const on=target===mo;
-        h+=`<button class="ob-chip ${on?'on':''}" style="flex:1;justify-content:center;padding:10px 4px;font-size:13px" onclick="S.payoffTarget=${mo};render()">${mo} mo</button>`;
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">${canPayFullNow?'Or spread it out':'Pay off in'}</div>
+        <div style="display:flex;gap:4px;margin-bottom:8px">`;
+      const presets=[6,12,18,24];
+      presets.forEach(mo=>{
+        h+=`<button class="ob-chip ${target===mo&&!S.payoffCustom?'on':''}" style="flex:1;justify-content:center;padding:10px 4px;font-size:13px" onclick="S.payoffTarget=${mo};S.payoffCustom=false;render()">${mo}</button>`;
       });
+      h+=`<button class="ob-chip ${S.payoffCustom?'on':''}" style="flex:1;justify-content:center;padding:10px 4px;font-size:13px" onclick="S.payoffCustom=true;render()">Other</button>`;
       h+=`</div>`;
+      if(S.payoffCustom){
+        h+=`<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px"><input id="payoff-custom" class="ob-input" style="flex:1;margin:0;text-align:center;font-size:16px;padding:10px" type="number" inputmode="numeric" min="1" max="120" placeholder="Months" value="${!presets.includes(target)?target:''}" oninput="const v=parseInt(this.value)||0;if(v>0&&v<=120){S.payoffTarget=v;clearTimeout(S._payoffTimer);S._payoffTimer=setTimeout(()=>render(),600)}"><span style="font-size:13px;color:var(--t2)">months</span></div>`;
+      }
 
       // Big payoff card
       h+=`<div style="background:${shortfall>0?'rgba(204,59,59,.06)':'rgba(26,143,92,.06)'};border:1px solid ${shortfall>0?'rgba(204,59,59,.15)':'rgba(26,143,92,.15)'};border-radius:14px;padding:14px;margin-bottom:10px">`;
@@ -1283,9 +1390,7 @@ function render(){
       h+=`<div class="card-stat"><span class="cs-label">Minimums total</span><span class="cs-val">${fmt(totalMin)}/mo</span></div>`;
       h+=`</div></div>`;
 
-      // Strategy toggle
-      h+=`<div class="debt-strat"><div class="${strat==='avalanche'?'on':''}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px" onclick="S.data.debts.strategy='avalanche';save();render()">Avalanche <span class="help-btn" style="border-color:${strat==='avalanche'?'rgba(255,255,255,.3)':'var(--bd)'};color:${strat==='avalanche'?'rgba(255,255,255,.7)':'var(--t3)'}" onclick="event.stopPropagation();showHelp('Avalanche strategy','Pays the highest APR card first while making minimum payments on everything else. Saves the most money in interest over time.')">?</span></div><div class="${strat==='snowball'?'on':''}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px" onclick="S.data.debts.strategy='snowball';save();render()">Snowball <span class="help-btn" style="border-color:${strat==='snowball'?'rgba(255,255,255,.3)':'var(--bd)'};color:${strat==='snowball'?'rgba(255,255,255,.7)':'var(--t3)'}" onclick="event.stopPropagation();showHelp('Snowball strategy','Pays the lowest balance card first for quick wins and motivation, while making minimums on everything else. Costs more in interest but feels faster.')">?</span></div></div>`;
-
+      // Individual cards
       // Individual cards
       cards.forEach((cd2,ci)=>{
         const recPay=payments[cd2.id]||0;
@@ -1489,13 +1594,14 @@ function render(){
       </div>
       <div style="margin-bottom:8px">${localStorage.getItem('bt-user')?'<div style="font-size:12px;color:var(--t2);margin-bottom:2px">Logged in as</div><div style="font-size:15px;font-weight:600;margin-bottom:8px">'+esc(localStorage.getItem('bt-user'))+'</div>':''}
       <div style="font-size:12px;color:var(--t2);margin-bottom:2px">Recovery code — screenshot this</div></div>
+      <button class="add" onclick="S.modal={type:'changepass'};render()">Change password</button>
       <button class="add" style="color:var(--rd);border-color:var(--rd)" onclick="customConfirm('Log out? You will need your sync code to reconnect.',()=>{localStorage.removeItem('bt-sync');location.reload()})">Log out</button>
       <button class="add" style="color:var(--rd);border-color:var(--rd);margin-top:4px" onclick="customConfirm('Start over? This will erase ALL your data and reset the app. This cannot be undone.',()=>{localStorage.clear();location.reload()})">Start over</button>
     </div></div>`;
   }
 
   // FAB
-  if(S.view==='budget'&&!S.edit&&S.budgetView!=='dash'){h+=`<button class="mic-fab" onclick="startVoice()">🎤</button>`;h+=`<button class="fab" onclick="openQuickAdd()">+</button>`}
+  if(!S.edit&&S.view!=='settings'){h+=`<button class="mic-fab" onclick="startVoice()">🎤</button>`;h+=`<button class="fab" onclick="openQuickAdd()">+</button>`}
 
   // Tab bar
   h+=`<div class="tab-bar">`;
@@ -1654,46 +1760,46 @@ function renderModal(){
     // Type toggle
     h+=`<h3>Quick add</h3>`;
     const hasCards=(S.data.debts?.cards||[]).length>0;
-    h+=`<div class="qa-type"><button class="${qaType==='expense'?'on':''}" onclick="S.modal.qaType='expense';S.modal.selCat=null;S.modal.selItem=null;render()">Expense</button><button class="${qaType==='income'?'on':''}" onclick="S.modal.qaType='income';S.modal.selCat=null;S.modal.selItem=null;render()">Income</button>${hasCards?`<button class="${qaType==='payment'?'on':''}" onclick="S.modal.qaType='payment';S.modal.selCat=null;S.modal.selItem=null;render()">Payment</button>`:''}</div>`;
+    h+=`<div class="qa-type"><button class="${qaType==='expense'?'on':''}" onclick="saveModalInputs();S.modal.qaType='expense';S.modal.selCat=null;S.modal.selItem=null;render()">Expense</button><button class="${qaType==='income'?'on':''}" onclick="saveModalInputs();S.modal.qaType='income';S.modal.selItem=null;render()">Income</button>${hasCards?`<button class="${qaType==='payment'?'on':''}" onclick="saveModalInputs();S.modal.qaType='payment';S.modal.selItem=null;render()">Payment</button>`:''}</div>`;
     // Amount
-    h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:24px;font-weight:700;text-align:center;padding:16px" onkeydown="if(event.key==='Enter'&&document.getElementById('m-note'))document.getElementById('m-note').focus()">`;
+    h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:24px;font-weight:700;text-align:center;padding:16px" value="${m._amt||''}" oninput="S.modal._amt=this.value;updateBalPreview()" onkeydown="if(event.key==='Enter'&&document.getElementById('m-note'))document.getElementById('m-note').focus()">`;
     // Note
-    h+=`<label>What's it for?</label><input id="m-note" maxlength="100" placeholder="${qaType==='income'?'e.g. Commission, freelance gig':'e.g. Uber Eats, cat food, bar tab'}">`;
+    h+=`<label>What's it for?</label><input id="m-note" maxlength="100" placeholder="${qaType==='income'?'e.g. Commission, freelance gig':'e.g. Uber Eats, cat food, bar tab'}" value="${esc(m._note||'')}">`;
     // Tags
     h+=`<label>Tags (optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work">`;
     // Category/item picker
     if(qaType==="expense"){
-      h+=`<label>Category</label><div class="qa-cats">`;
+      h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Category</label><div class="qa-cats">`;
       md2.categories.forEach(cat=>{
-        h+=`<button class="qa-cat ${selCat===cat.id?'on':''}" onclick="S.modal.selCat='${cat.id}';S.modal.selItem=null;render()">${esc(cat.name)}</button>`;
+        h+=`<button class="qa-cat ${selCat===cat.id?'on':''}" onclick="saveModalInputs();S.modal.selCat='${cat.id}';S.modal.selItem=null;render()">${esc(cat.name)}</button>`;
       });
       h+=`</div>`;
       if(selCat){
         const selCatObj=findById(md2.categories,selCat);
         if(selCatObj){
-          h+=`<div class="qa-items">`;
+          h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px;display:block">Item in ${esc(selCatObj.name)}</label><div class="qa-items">`;
           selCatObj.items.forEach(it=>{
-            h+=`<button class="qa-item ${selItem===it.id?'on':''}" onclick="S.modal.selItem='${it.id}';render()">${esc(it.label)}</button>`;
+            h+=`<button class="qa-item ${selItem===it.id?'on':''}" onclick="saveModalInputs();S.modal.selItem='${it.id}';render()">${esc(it.label)}</button>`;
           });
-          h+=`</div>`;
+          h+=`</div></div>`;
         }
       }
     } else if(qaType==="income"){
-      h+=`<label>Source</label><div class="qa-cats">`;
+      h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Source</label><div class="qa-cats">`;
       md2.income.forEach(inc=>{
-        h+=`<button class="qa-cat ${selItem===inc.id?'on':''}" onclick="S.modal.selItem='${inc.id}';render()">${esc(inc.label)}</button>`;
+        h+=`<button class="qa-cat ${selItem===inc.id?'on':''}" onclick="saveModalInputs();S.modal.selItem='${inc.id}';render()">${esc(inc.label)}</button>`;
       });
       h+=`</div>`;
     } else if(qaType==="payment"){
       const pcards=S.data.debts?.cards||[];
-      h+=`<label>Which card?</label><div class="qa-cats">`;
+      h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Which card?</label><div class="qa-cats">`;
       pcards.forEach(cd=>{
-        h+=`<button class="qa-cat ${selItem===cd.id?'on':''}" onclick="S.modal.selItem='${cd.id}';render()">${esc(cd.name)} <span style="font-size:11px;color:var(--rd)">${fmt(cd.balance)}</span></button>`;
+        h+=`<button class="qa-cat ${selItem===cd.id?'on':''}" onclick="saveModalInputs();S.modal.selItem='${cd.id}';render()">${esc(cd.name)} <span style="font-size:11px;color:var(--rd)">${fmt(cd.balance)}</span></button>`;
       });
       h+=`</div>`;
       if(selItem){
         const selCard=pcards.find(x=>x.id===selItem);
-        if(selCard)h+=`<div style="font-size:12px;color:var(--t2);margin-top:4px;padding:6px 10px;background:var(--bg);border-radius:8px">Balance after: <b style="color:var(--gn)">${fmt(Math.max(0,selCard.balance-(parseFloat(document.getElementById('m-inp')?.value)||0)))}</b></div>`;
+        if(selCard){const previewAmt=parseFloat(m._amt)||0;h+=`<div id="bal-preview" style="font-size:12px;color:var(--t2);margin-top:4px;padding:6px 10px;background:var(--bg);border-radius:8px">Balance after: <b style="color:var(--gn)">${fmt(Math.max(0,selCard.balance-previewAmt))}</b></div>`;}
       }
     }
     h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveQuickAdd()">Add</button></div>`;
@@ -1727,23 +1833,31 @@ function renderModal(){
     const md2=cm();
     h+=`<h3>New shortcut</h3>
       <label>Button label</label><input id="m-label" maxlength="50" placeholder="e.g. Train, Coffee, Lunch" maxlength="50">
-      <label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="e.g. 3">
-      <label>Category</label><div class="qa-cats">`;
+      <label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="e.g. 3" value="${m._amt||''}">
+      <div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Category</label><div class="qa-cats">`;
     md2.categories.forEach(cat=>{
-      h+=`<button class="qa-cat ${m.selCat===cat.id?'on':''}" onclick="S.modal.selCat='${cat.id}';S.modal.selItem=null;render()">${esc(cat.name)}</button>`;
+      h+=`<button class="qa-cat ${m.selCat===cat.id?'on':''}" onclick="saveModalInputs();S.modal.selCat='${cat.id}';S.modal.selItem=null;render()">${esc(cat.name)}</button>`;
     });
     h+=`</div>`;
     if(m.selCat){
       const selCatObj=findById(md2.categories,m.selCat);
       if(selCatObj){
-        h+=`<div class="qa-items">`;
+        h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px;display:block">Item</label><div class="qa-items">`;
         selCatObj.items.forEach(it=>{
-          h+=`<button class="qa-item ${m.selItem===it.id?'on':''}" onclick="S.modal.selItem='${it.id}';render()">${esc(it.label)}</button>`;
+          h+=`<button class="qa-item ${m.selItem===it.id?'on':''}" onclick="saveModalInputs();S.modal.selItem='${it.id}';render()">${esc(it.label)}</button>`;
         });
-        h+=`</div>`;
+        h+=`</div></div>`;
       }
     }
     h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveQuickButton()">Save</button></div>`;
+  }
+  else if(m.type==="changepass"){
+    h+=`<h3>Change password</h3>
+      <label>Current password</label><input id="m-oldpass" type="password" maxlength="100" class="ob-input" style="text-align:left;margin:4px 0" placeholder="Current password">
+      <label>New password</label><input id="m-newpass" type="password" maxlength="100" class="ob-input" style="text-align:left;margin:4px 0" placeholder="New password (min 4 chars)">
+      <label>Confirm new password</label><input id="m-newpass2" type="password" maxlength="100" class="ob-input" style="text-align:left;margin:4px 0" placeholder="Confirm new password" onkeydown="if(event.key==='Enter')document.getElementById('chg-pass-btn').click()">
+      ${S.err?'<div style="color:var(--rd);font-size:12px;margin:6px 0">'+S.err+'</div>':''}
+      <div class="mbs"><button class="cn" onclick="S.err='';closeModal()">Cancel</button><button id="chg-pass-btn" class="sv" onclick="doChangePass()">Save</button></div>`;
   }
   else if(m.type==="joingroup"){
     h+=`<h3>Join a group</h3>
@@ -1756,7 +1870,7 @@ function renderModal(){
     const members=Object.keys(gd.members||{}).filter(x=>x!==(agrp?agrp.name:""));
     if(!m.splitWith)m.splitWith=[...members];
     h+=`<h3>Shared expense</h3>
-      <label>Amount (total)</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:20px;text-align:center" onkeydown="if(event.key==='Enter')document.getElementById('m-note').focus()">
+      <label>Amount (total)</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:20px;text-align:center" value="${m._amt||''}" onkeydown="if(event.key==='Enter')document.getElementById('m-note').focus()">
       <label>What's it for?</label><input id="m-note" maxlength="100" placeholder="e.g. Rent, utilities, groceries" maxlength="100">
       <label>Split with</label><div class="qa-cats">`;
     members.forEach((mem,mi2)=>{
@@ -1828,7 +1942,13 @@ function saveTx(){
   const item=getItemFromMonth(md,m.itemId,m.catId);
   if(!item)return;
   if(!item.transactions)item.transactions=[];
+  tx.paidWith=m.paidWith||"cash";
   item.transactions.push(tx);
+  // If paid with credit card, increase card balance
+  if(m.qaType==="expense"&&m.paidWith&&m.paidWith!=="cash"&&m.paidWith!=="debit"){
+    const ecard=(S.data.debts?.cards||[]).find(cd=>cd.id===m.paidWith);
+    if(ecard)ecard.balance+=amt;
+  }
   S.data.streakDate=new Date().toISOString().split('T')[0];
   save();closeModal();
 }
@@ -2050,11 +2170,56 @@ function generateGroupCode(){
   return code;
 }
 
+async function doChangePass(){
+  const oldPass=document.getElementById("m-oldpass").value;
+  const newPass=document.getElementById("m-newpass").value;
+  const newPass2=document.getElementById("m-newpass2").value;
+  const user=localStorage.getItem("bt-user");
+  if(!user){S.err="No username found. Recovery code users can't change password here.";render();return}
+  if(!oldPass){S.err="Enter your current password";render();return}
+  if(!newPass||newPass.length<4){S.err="New password must be at least 4 characters";render();return}
+  if(newPass!==newPass2){S.err="New passwords don't match";render();return}
+  // Verify old password
+  const oldCode=await deriveCode(user,oldPass);
+  if(oldCode!==S.pin){S.err="Current password is incorrect";render();return}
+  // Generate new code and migrate data
+  const newCode=await deriveCode(user,newPass);
+  if(db){
+    const oldHash=await sha(oldCode);
+    const newHash=await sha(newCode);
+    // Copy data to new path
+    await db.ref("budgets/"+newHash).set(S.data);
+    // Remove old path
+    await db.ref("budgets/"+oldHash).remove();
+    // Reconnect
+    dbRef.off();dbRef=db.ref("budgets/"+newHash);
+    dbRef.on("value",s=>{if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();render()}});
+  } else {
+    const oldHash=await sha(oldCode);
+    const newHash=await sha(newCode);
+    localStorage.setItem("bt-"+newHash,JSON.stringify(S.data));
+    localStorage.removeItem("bt-"+oldHash);
+  }
+  localStorage.setItem("bt-sync",newCode);
+  S.pin=newCode;S.err="";
+  closeModal();
+  toast("Password changed");
+}
+
 async function doLogin(){
   const user=document.getElementById("login-user").value.trim();
   const pass=document.getElementById("login-pass").value;
   if(!user||!pass){S.err="Enter username and password";render();return}
   const code=await deriveCode(user,pass);
+  // Check if account exists before connecting
+  if(db){
+    const h=await sha(code);
+    const snap=await db.ref("budgets/"+h).once("value");
+    if(!snap.exists()){S.err="Account not found. Check your username and password, or create a new account.";render();return}
+  } else {
+    const h2=await sha(code);
+    if(!localStorage.getItem("bt-"+h2)){S.err="No account found on this device.";render();return}
+  }
   localStorage.setItem("bt-user",user);
   localStorage.setItem("bt-sync",code);
   S.pin=code;
@@ -2107,10 +2272,11 @@ function renderWelcome(){
       <div style="width:100%;max-width:300px">
         <input id="ob-name" class="ob-input" style="text-align:left" maxlength="50" placeholder="Your name (for group expenses)" value="${esc(S.obName||"")}" onkeydown="if(event.key==='Enter')document.getElementById('ob-user').focus()">
         <input id="ob-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(S.obUser||"")}" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass').focus()">
-        <input id="ob-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S.obPass||""}" onkeydown="if(event.key==='Enter')document.getElementById('ob-next').click()">
+        <input id="ob-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S.obPass||""}" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass2').focus()">
+        <input id="ob-pass2" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Confirm password" value="${S.obPass2||""}" onkeydown="if(event.key==='Enter')document.getElementById('ob-next').click()">
         ${S.err?'<div style="color:var(--rd);font-size:12px;margin:4px 0">'+S.err+'</div>':''}
       </div>
-      <button id="ob-next" class="ob-btn" onclick="const u=document.getElementById('ob-user').value.trim();const p2=document.getElementById('ob-pass').value;if(!u||u.length<3){S.err='Username must be at least 3 characters';render();return}if(!p2||p2.length<4){S.err='Password must be at least 4 characters';render();return}S.obName=document.getElementById('ob-name').value.trim()||u;S.obUser=u;S.obPass=p2;S.err='';S.obStep=2;render()">Next</button></div>`;
+      <button id="ob-next" class="ob-btn" onclick="const u=document.getElementById('ob-user').value.trim();const p2=document.getElementById('ob-pass').value;const p3=document.getElementById('ob-pass2').value;if(!u||u.length<3){S.err='Username must be at least 3 characters';render();return}if(!p2||p2.length<4){S.err='Password must be at least 4 characters';render();return}if(p2!==p3){S.err='Passwords don\'t match';render();return}S.obName=document.getElementById('ob-name').value.trim()||u;S.obUser=u;S.obPass=p2;S.obPass2=p3;S.err='';S.obStep=2;render()">Next</button></div>`;
   } else if(step===2){
     if(!S.obIncomeType)S.obIncomeType=null;if(!S.obIncomeAmts)S.obIncomeAmts={};
     const types=[{id:"salary",label:"Salary",desc:"Fixed paycheck",fields:[{k:"salary",l:"Monthly take-home (after tax)",ph:"e.g. 5000"}]},{id:"hourly",label:"Hourly",desc:"Varies by hours",fields:[{k:"hourly",l:"Avg monthly take-home",ph:"e.g. 2400"}]},{id:"base_comm",label:"Base + Commission",desc:"Fixed + variable",fields:[{k:"base",l:"Monthly base take-home",ph:"e.g. 4600"},{k:"comm",l:"Avg monthly commission (after tax)",ph:"e.g. 1800"}]},{id:"comm_only",label:"Commission only",desc:"100% variable",fields:[{k:"comm",l:"Avg monthly commission",ph:"e.g. 3000"}]},{id:"freelance",label:"Freelance / Gig",desc:"Multiple sources",fields:[{k:"freelance",l:"Avg monthly take-home",ph:"e.g. 4000"}]}];
@@ -2120,7 +2286,7 @@ function renderWelcome(){
     const selType=types.find(t2=>t2.id===S.obIncomeType);
     if(selType){
       h+=`<div style="width:100%;max-width:320px;margin-top:12px">`;
-      selType.fields.forEach(f2=>{h+=`<label style="font-size:12px;color:var(--t2);margin-top:8px;display:block">${f2.l}</label><input class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="decimal" placeholder="${f2.ph}" value="${S.obIncomeAmts[f2.k]||''}" onchange="S.obIncomeAmts['${f2.k}']=parseFloat(this.value)||0">`});
+      selType.fields.forEach(f2=>{h+=`<label style="font-size:12px;color:var(--t2);margin-top:8px;display:block">${f2.l}</label><input class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="decimal" placeholder="${f2.ph}" value="${S.obIncomeAmts[f2.k]||''}" oninput="S.obIncomeAmts['${f2.k}']=parseFloat(this.value)||0" onblur="render()">`});
       // Commission allocation toggle
       if(S.obIncomeType==='base_comm'||S.obIncomeType==='comm_only'){
         if(S.obCommPct===undefined)S.obCommPct=50;
@@ -2152,20 +2318,40 @@ function renderWelcome(){
     h+=`<button class="ob-btn" onclick="S.obStep=4;if(!S.obBudgets)S.obBudgets={};render()">Next</button><button class="ob-skip" onclick="S.obStep=5;if(!S.obCards)S.obCards=[];render()">Skip</button></div>`;
   } else if(step===4){
     // Fixed monthly expenses
-    if(!S.obFixed)S.obFixed=[
-      {label:"Rent",amount:0,on:true,cat:"Rent / Housing"},
-      {label:"Utilities (electric, gas, water)",amount:0,on:false,cat:"Rent / Housing"},
-      {label:"Internet",amount:0,on:false,cat:"Rent / Housing"},
-      {label:"Phone plan",amount:0,on:false,cat:"Subscriptions"},
-      {label:"Car payment",amount:0,on:false,cat:"Transport"},
-      {label:"Car insurance",amount:0,on:false,cat:"Transport"},
-      {label:"Student loans",amount:0,on:false,cat:"Loans"},
-      {label:"Other loan",amount:0,on:false,cat:"Loans"},
-      {label:"Health insurance",amount:0,on:false,cat:"Health"},
-      {label:"Gym membership",amount:0,on:false,cat:"Health"},
-      {label:"Streaming (Netflix, Spotify, etc)",amount:0,on:false,cat:"Subscriptions"},
-      {label:"Renters insurance",amount:0,on:false,cat:"Rent / Housing"},
-    ];
+    if(!S.obFixed){
+      const selCats=new Set((S.obCats||[]).map(c2=>c2.toLowerCase()));
+      const fixedOptions=[];
+      // Always show essentials
+      fixedOptions.push({label:"Rent",amount:0,on:true,cat:"Rent / Housing"});
+      fixedOptions.push({label:"Utilities (electric, gas, water)",amount:0,on:false,cat:"Rent / Housing"});
+      fixedOptions.push({label:"Internet",amount:0,on:false,cat:"Rent / Housing"});
+      fixedOptions.push({label:"Renters / home insurance",amount:0,on:false,cat:"Rent / Housing"});
+      // Transport
+      if(selCats.has("transport")){
+        fixedOptions.push({label:"Car payment",amount:0,on:false,cat:"Transport"});
+        fixedOptions.push({label:"Car insurance",amount:0,on:false,cat:"Transport"});
+        fixedOptions.push({label:"Metro / transit pass",amount:0,on:false,cat:"Transport"});
+      }
+      // Subscriptions
+      if(selCats.has("subscriptions")){
+        fixedOptions.push({label:"Phone plan",amount:0,on:false,cat:"Subscriptions"});
+        fixedOptions.push({label:"Streaming (Netflix, Spotify)",amount:0,on:false,cat:"Subscriptions"});
+        fixedOptions.push({label:"Software / apps",amount:0,on:false,cat:"Subscriptions"});
+      }
+      // Health
+      if(selCats.has("health")){
+        fixedOptions.push({label:"Health insurance",amount:0,on:false,cat:"Health"});
+        fixedOptions.push({label:"Gym membership",amount:0,on:false,cat:"Health"});
+      }
+      // Pets / Cats
+      if(selCats.has("cats")||selCats.has("pets")){
+        fixedOptions.push({label:"Pet insurance",amount:0,on:false,cat:"Cats"});
+      }
+      // Loans - always show
+      fixedOptions.push({label:"Student loans",amount:0,on:false,cat:"Loans"});
+      fixedOptions.push({label:"Other loan / debt",amount:0,on:false,cat:"Loans"});
+      S.obFixed=fixedOptions;
+    }
     const commAlloc=S.obIncomeAmts?.comm?(S.obIncomeAmts.comm*(S.obCommPct||50)/100):0;
     const basePay3=(S.obIncomeAmts?.salary||S.obIncomeAmts?.base||S.obIncomeAmts?.hourly||S.obIncomeAmts?.freelance||0)+commAlloc;
     const fixedTotal=S.obFixed.filter(f=>f.on).reduce((s,f)=>s+f.amount,0);
@@ -2173,20 +2359,20 @@ function renderWelcome(){
       <p style="text-align:center;font-size:12px;color:var(--t2)">These are bills you pay every month no matter what.</p><div style="max-width:340px;margin:0 auto;width:100%">`;
     S.obFixed.forEach((f,fi)=>{
       h+=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <button style="width:28px;height:28px;border-radius:8px;border:1.5px solid ${f.on?'var(--ac)':'var(--bd)'};background:${f.on?'var(--ac)':'var(--c1)'};color:#fff;font-size:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center" onclick="S.obFixed[${fi}].on=!S.obFixed[${fi}].on;render()">${f.on?'\u2713':''}</button>
+        <button style="width:28px;height:28px;border-radius:8px;border:1.5px solid ${f.on?'var(--ac)':'var(--bd)'};background:${f.on?'var(--ac)':'var(--c1)'};color:#fff;font-size:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center" onclick="saveFixedInputs();S.obFixed[${fi}].on=!S.obFixed[${fi}].on;render()">${f.on?'\u2713':''}</button>
         <span style="flex:1;font-size:13px;color:${f.on?'var(--tx)':'var(--t3)'}">${esc(f.label)}</span>
-        ${f.on?`<div style="position:relative;flex:0 0 100px"><span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:13px">$</span><input class="ob-input" style="margin:0;padding:10px 10px 10px 22px;font-size:13px" type="number" inputmode="decimal" value="${f.amount||''}" onchange="S.obFixed[${fi}].amount=parseFloat(this.value)||0;render()"></div>`:''}
+        ${f.on?`<div style="position:relative;flex:0 0 100px"><span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:13px">$</span><input id="fixed-amt-${fi}" class="ob-input" style="margin:0;padding:10px 10px 10px 22px;font-size:13px" type="number" inputmode="decimal" value="${f.amount||''}" oninput="S.obFixed[${fi}].amount=parseFloat(this.value)||0;updateFixedSummary()" onblur="render()"></div>`:''}
       </div>`;
     });
     // Custom add
-    h+=`<div style="display:flex;gap:6px;margin-top:8px"><input id="ob-custom-fixed" class="ob-input" style="flex:1;margin:0;text-align:left;font-size:13px;padding:10px" maxlength="50" placeholder="Other fixed expense"><button class="ob-btn sec" style="min-width:auto;padding:10px 14px;font-size:12px;margin:0" onclick="const v=document.getElementById('ob-custom-fixed').value.trim();if(v){S.obFixed.push({label:v,amount:0,on:true,cat:'Misc'});render()}">Add</button></div>`;
+    h+=`<div style="display:flex;gap:6px;margin-top:8px"><input id="ob-custom-fixed" class="ob-input" style="flex:1;margin:0;text-align:left;font-size:13px;padding:10px" maxlength="50" placeholder="Other fixed expense"><button class="ob-btn sec" style="min-width:auto;padding:10px 14px;font-size:12px;margin:0" onclick="saveFixedInputs();const v=document.getElementById('ob-custom-fixed').value.trim();if(v){S.obFixed.push({label:v,amount:0,on:true,cat:'Misc'});render()}">Add</button></div>`;
     // Summary
     if(basePay3>0){
       const leftAfterFixed=basePay3-fixedTotal;
       h+=`<div style="text-align:center;font-size:13px;margin-top:12px;padding:10px;background:var(--c1);border-radius:10px">
         Take-home: ${fmt(basePay3)} · Fixed: ${fmt(fixedTotal)} · <span style="color:${leftAfterFixed>=0?'var(--gn)':'var(--rd)'}">Left: ${fmt(leftAfterFixed)}</span></div>`;
     }
-    h+=`</div><button class="ob-btn" style="margin-top:12px;align-self:center" onclick="S.obStep=5;S.obBudgetsSeeded=false;render()">Next</button></div>`;
+    h+=`</div><button class="ob-btn" style="margin-top:12px;align-self:center" onclick="saveFixedInputs();S.obStep=5;S.obBudgetsSeeded=false;render()">Next</button></div>`;
 
   } else if(step===5){
     // Flexible budget from what's left after fixed + savings
@@ -2263,9 +2449,9 @@ function renderWelcome(){
     });
     h+=`</div>`;
     if(S.obSavingsCustom){
-      h+=`<div style="display:flex;gap:6px;align-items:center"><span style="font-size:14px;color:var(--t3)">$</span><input class="ob-input" style="flex:1;margin:0;text-align:left;font-size:14px;padding:10px" type="number" inputmode="decimal" placeholder="Monthly savings amount" value="${S.obSavingsGoal||''}" onchange="S.obSavingsGoal=parseFloat(this.value)||0;S.obBudgetsSeeded=false;render()"></div>`;
+      h+=`<div style="display:flex;gap:6px;align-items:center"><span style="font-size:14px;color:var(--t3)">$</span><input class="ob-input" style="flex:1;margin:0;text-align:left;font-size:14px;padding:10px" type="number" inputmode="decimal" placeholder="Monthly savings amount" value="${S.obSavingsGoal||''}" oninput="S.obSavingsGoal=parseFloat(this.value)||0;updateSavingsLeft()" onblur="S.obBudgetsSeeded=false;render()"></div>`;
     }
-    h+=`<div style="font-size:12px;margin-top:6px;color:var(--t2)">Left for spending: <b style="color:${flexiblePot>0?'var(--gn)':'var(--rd)'}">${fmt(flexiblePot)}</b></div>`;
+    h+=`<div id="savings-left" style="font-size:12px;margin-top:6px;color:var(--t2)">Left for spending: <b style="color:${flexiblePot>0?'var(--gn)':'var(--rd)'}">${fmt(flexiblePot)}</b></div>`;
     h+=`</div>`;
     if(flexiblePot>0)h+=`<p style="text-align:center;font-size:12px;color:var(--t2);margin-bottom:4px">Recommended spending from the remaining ${fmt(flexiblePot)}</p>`;
     h+=`<div style="max-width:340px;margin:0 auto;width:100%">`;
@@ -2278,15 +2464,15 @@ function renderWelcome(){
       const isFixed=fixedCats.has(catName)||fixedByCategory[catName];
       h+=`<div style="margin-bottom:14px"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${esc(catName)} ${isFixed?'<span style="font-size:10px;color:var(--t3);font-weight:400">fixed</span>':''}</div>`;
       items.forEach((it2,ii)=>{
-        h+=`<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px"><input class="ob-input" style="flex:1;text-align:left;margin:0;font-size:13px;padding:10px" maxlength="50" value="${esc(it2.label)}" onchange="S.obBudgets['${cne}'][${ii}].label=this.value"><div style="position:relative;flex:0 0 90px"><span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:13px">$</span><input class="ob-input" style="margin:0;padding:10px 10px 10px 22px;font-size:13px" type="number" inputmode="decimal" value="${it2.amount||''}" onchange="S.obBudgets['${cne}'][${ii}].amount=parseFloat(this.value)||0"></div><button style="background:none;border:none;color:var(--t3);font-size:16px;padding:4px;min-width:28px" onclick="S.obBudgets['${cne}'].splice(${ii},1);render()">\u00d7</button></div>`;
+        h+=`<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px"><input class="ob-input" data-bi="${cne}|${ii}|label" style="flex:1;text-align:left;margin:0;font-size:13px;padding:10px" maxlength="50" value="${esc(it2.label)}" oninput="S.obBudgets['${cne}'][${ii}].label=this.value" onblur="saveBudgetInputs();render()"><div style="position:relative;flex:0 0 90px"><span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:13px">$</span><input class="ob-input" data-bi="${cne}|${ii}|amount" style="margin:0;padding:10px 10px 10px 22px;font-size:13px" type="number" inputmode="decimal" value="${it2.amount||''}" oninput="S.obBudgets['${cne}'][${ii}].amount=parseFloat(this.value)||0" onblur="saveBudgetInputs();render()"></div><button style="background:none;border:none;color:var(--t3);font-size:16px;padding:4px;min-width:28px" onclick="saveBudgetInputs();S.obBudgets['${cne}'].splice(${ii},1);render()">\u00d7</button></div>`;
       });
-      h+=`<button style="background:none;border:none;color:var(--ac);font-size:12px;font-weight:600;padding:4px 0" onclick="S.obBudgets['${cne}'].push({label:'',amount:0,recurring:false});render()">+ Add item</button></div>`;
+      h+=`<button style="background:none;border:none;color:var(--ac);font-size:12px;font-weight:600;padding:4px 0" onclick="saveBudgetInputs();S.obBudgets['${cne}'].push({label:'',amount:0,recurring:false});render()">+ Add item</button></div>`;
     });
     h+=`</div>`;
     const totalB3=Object.values(S.obBudgets).flat().reduce((s,i)=>s+(i.amount||0),0);
     const totalI3=Object.values(S.obIncomeAmts||{}).reduce((s,v)=>s+v,0);
     if(totalB3>0||totalI3>0){const left3=totalI3-totalB3;h+=`<div style="text-align:center;font-size:12px;margin-top:8px;padding:10px;background:var(--c1);border-radius:10px;line-height:1.6">Income: ${fmt(totalI3)}<br>Fixed: ${fmt(fixedTotal2)} · Savings: ${fmt(S.obSavingsGoal||0)} · Spending: ${fmt(totalB3-fixedTotal2-(S.obSavingsGoal||0))}<br><span style="color:${left3>=0?'var(--gn)':'var(--rd)'}">Unbudgeted: ${fmt(left3)}</span></div>`}
-    h+=`<button class="ob-btn" style="margin-top:12px;align-self:center" onclick="S.obStep=6;if(!S.obCards)S.obCards=[];render()">Next</button></div>`;
+    h+=`<button class="ob-btn" style="margin-top:12px;align-self:center" onclick="saveBudgetInputs();S.obStep=6;if(!S.obCards)S.obCards=[];render()">Next</button></div>`;
   } else if(step===6){
     if(!S.obCards)S.obCards=[];
     h+=`<div class="ob-top">${backBtn(5)}<div class="ob-step">Step 6 of 6</div><h2>Got credit cards?</h2><p>Add any cards with a balance.</p>`;
