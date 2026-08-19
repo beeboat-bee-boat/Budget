@@ -543,50 +543,11 @@ function linkGoogle(){
     var user=result.user;
     S.firebaseUser=user;
     S._localMode=false;
-    dbRef=db.ref("budgets/"+user.uid);
-    // Check if Firebase already has data
-    dbRef.once("value").then(function(snap){
-      if(snap.exists()){
-        var remoteData=snap.val();
-        var remoteTmpl=remoteData.template||{};
-        var remoteHasSetup=(remoteTmpl.income&&remoteTmpl.income.length>0)||(remoteTmpl.categories&&remoteTmpl.categories.length>2);
-        if(remoteHasSetup){
-          // Firebase has real data — compare timestamps
-          var remoteTime=remoteData._lastModified||0;
-          var localTime=S.data._lastModified||0;
-          if(remoteTime>localTime){
-            // Remote is newer — use it
-            S.data=remoteData;
-            toast("Signed in — loaded your existing data from "+user.email);
-          } else {
-            // Local is newer — ask user
-            customConfirm("Found existing data on "+user.email+". Keep cloud data or replace with local data?",function(){
-              // Replace with local
-              dbRef.set(S.data);
-              toast("Linked — pushed local data to "+user.email);
-            });
-            // Default: keep remote
-            S.data=remoteData;
-            toast("Signed in — loaded cloud data. Tap 'Start over' if you want to use local data instead.");
-          }
-        } else {
-          // Firebase has empty/default data — push local
-          dbRef.set(S.data);
-          toast("Linked to "+user.email);
-        }
-      } else {
-        // No Firebase data — push local
-        dbRef.set(S.data);
-        toast("Linked to "+user.email);
-      }
-      ensureStructure();
-      localStorage.removeItem("bt-local-data");
-      dbRef.on("value",function(s){if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){}}});
-      render();
-    });
+    connectWithUid(user.uid,user.displayName||user.email);
+    toast("Signed in as "+user.email);
   }).catch(function(e){
     if(e.code==='auth/popup-blocked'){auth.signInWithRedirect(provider)}
-    else{toast("Link failed: "+e.message)}
+    else{toast("Sign in failed: "+e.message)}
   });
 }
 
@@ -659,7 +620,7 @@ function forceSync(){
 function _doSave(){
   if(S.data)S.data._lastModified=Date.now();
   if(dbRef){dbRef.set(S.data).catch(function(e){console.error("Firebase save error:",e)})}
-  localStorage.setItem("bt-local-data",JSON.stringify(S.data));
+  if(!S._localMode)localStorage.setItem("bt-local-data",JSON.stringify(S.data));
   const code=S.pin;
   sha(code).then(h=>localStorage.setItem("bt-"+h,JSON.stringify(S.data)));
 }
@@ -2127,6 +2088,9 @@ function _render(){
 
     } else {
       // === DASHBOARD ===
+      if(S._localMode){
+        h+=`<div style="background:rgba(224,112,85,.08);border:1px solid rgba(224,112,85,.25);border-radius:10px;padding:12px 14px;margin:0 16px 8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:13px;font-weight:600;color:var(--rd)">Demo mode</div><div style="font-size:11px;color:var(--t2);margin-top:2px">Nothing saves when you close this tab</div></div><button style="font-size:12px!important;padding:8px 14px!important;background:var(--ac)!important;color:white!important;border:none!important;border-radius:8px!important;font-weight:600" onclick="linkGoogle()">Sign in</button></div><div style="display:flex;gap:6px"><button style="flex:1;font-size:11px!important;padding:6px!important;background:rgba(255,255,255,.05)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important;min-height:auto!important" onclick="exportCSV()">Export CSV</button><button style="flex:1;font-size:11px!important;padding:6px!important;background:rgba(255,255,255,.05)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important;min-height:auto!important" onclick="exportData()">Export JSON</button></div></div>`;
+      }
       // Running total across all months
       let runTotal=0;
       const curMoHist=mk();const startMoHist=S.data._startMonth||curMoHist;
@@ -4299,6 +4263,11 @@ function importCSV(text){
     cells.push(cur.trim());return cells;
   });
   if(lines.length<2){toast("CSV is empty");return}
+  customConfirm("This will replace ALL current data with the CSV file. Continue?",function(){
+  // Reset data to fresh state
+  S.data=JSON.parse(JSON.stringify(DEF));
+  S.data.userName=S.data.userName||"";
+  S.data.months={};
   // Parse transactions
   var txCount=0;
   for(var i=1;i<lines.length;i++){
@@ -4327,7 +4296,8 @@ function importCSV(text){
     }
   }
   ensureStructure();save();render();
-  toast("Imported "+txCount+" transactions from CSV");
+  toast("Imported "+txCount+" transactions — all data replaced");
+  });
 }
 
 function importData(){
@@ -4339,7 +4309,9 @@ function importData(){
       } else {
         var parsed=JSON.parse(ev.target.result);
         if(parsed._syncCode)delete parsed._syncCode;
-        S.data=parsed;ensureStructure();save();render();toast("Restored from JSON");
+        customConfirm("This will replace ALL current data with the imported file. Continue?",function(){
+          S.data=parsed;ensureStructure();save();render();toast("Imported — all data replaced from JSON");
+        });
       }
     }catch(err){toast("Import failed: "+err.message)}
   };r.readAsText(f)};
@@ -4600,7 +4572,8 @@ const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true
         <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#34A853" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
         Sign in with Google
       </button>
-      <button class="ob-btn sec" style="margin-top:10px" onclick="startLocal()">Get started without an account</button>
+      <button class="ob-btn sec" style="margin-top:10px" onclick="startLocal()">Demo mode</button>
+        <div style="font-size:11px;color:var(--or);margin-top:6px;line-height:1.4">⚠ Demo only — nothing saves. Export CSV or JSON before closing to keep your data. Sign in with Google to save permanently.</div>
       <div style="font-size:11px;color:var(--t3);margin-top:8px">Your finances, organized. Sign in later to sync.</div>
     </div>`;
   } else if(step===2){
