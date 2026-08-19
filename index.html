@@ -1171,9 +1171,21 @@ function saveEditTx(){
   if(!item)return;
   const tx=item.transactions.find(t=>t.id===m.txId);
   if(!tx)return;
+  var oldAmt=tx.amount;
+  // Reverse old card impact, apply new
   if(tx.paidWith&&tx.paidWith!=="cash"&&tx.paidWith!=="debit"){
-    const card=S.data.debts?.cards?.find(cd=>cd.id===tx.paidWith);
-    if(card)card.balance=Math.max(0,card.balance-tx.amount+amt);
+    var card2=(S.data.debts?.cards||[]).find(function(cd){return cd.id===tx.paidWith});
+    if(card2)card2.balance=Math.max(0,card2.balance-oldAmt+amt);
+  }
+  // Reverse old debit impact, apply new
+  if(tx.paidWith==="debit"&&tx.debitAccount){
+    var dAcct2=(S.data.networth?.accounts||[]).find(function(a){return a.id===tx.debitAccount});
+    if(dAcct2){var cb2=getNWBalance(dAcct2,S.month);dAcct2.balances[S.month]=cb2+oldAmt-amt}
+  }
+  // Reverse old income deposit, apply new
+  if(!m.catId&&tx.depositTo&&tx.depositTo!=="none"){
+    var iAcct2=(S.data.networth?.accounts||[]).find(function(a){return a.id===tx.depositTo});
+    if(iAcct2){var ib2=getNWBalance(iAcct2,S.month);iAcct2.balances[S.month]=ib2-oldAmt+amt}
   }
   tx.amount=amt;tx.note=note;
   if(dateVal){tx.isoDate=dateVal;const d=new Date(dateVal+"T12:00:00");tx.date=(d.getMonth()+1)+"/"+d.getDate()}
@@ -1787,10 +1799,10 @@ function fireQuickButton(qi){
   const d=new Date();
   item.transactions.push({id:uid(),date:(d.getMonth()+1)+"/"+d.getDate(),amount:qb.amount,note:qb.label,tags:["quick"],auto:false});
   S.data.streakDate=new Date().toISOString().split('T')[0];
-  // Deposit income to account if selected
+  // Deposit income to account if selected  
   if(m.qaType==="income"&&m.depositTo&&m.depositTo!=="none"&&m.depositTo!=="cash"){
-    const acct=S.data.networth?.accounts?.find(a=>a.id===m.depositTo);
-    if(acct){const cur=getNWBalance(acct,S.month);acct.balances[S.month]=cur+amt}
+    var qbAcct=S.data.networth?.accounts?.find(function(a){return a.id===m.depositTo});
+    if(qbAcct){var qbCur=getNWBalance(qbAcct,S.month);qbAcct.balances[S.month]=qbCur+amt}
   }
   save();render();
 }
@@ -1836,10 +1848,16 @@ function saveDeposit(){
   if(!acct){toast("Account not found");return}
   const cur=getNWBalance(acct,S.month);
   acct.balances[S.month]=cur+amt;
-  // Log as a note in group money for tracking
+  // Transfer: deduct from source account
+  if(m.xferFrom&&m.xferFrom!=="new"){
+    var srcAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.xferFrom});
+    if(srcAcct){var sc=getNWBalance(srcAcct,S.month);srcAcct.balances[S.month]=sc-amt}
+  }
+  // Log for tracking
   if(!S.data.groupMoney)S.data.groupMoney=[];
-  S.data.groupMoney.push({id:uid(),date:new Date().toISOString().split("T")[0],amount:amt,type:"deposit",note:note+" → "+acct.label});
-  save();closeModal();toast("Deposited "+fmt(amt)+" to "+acct.label);
+  var depNote=m.xferFrom&&m.xferFrom!=="new"?"Transfer → "+acct.label:note+" → "+acct.label;
+  S.data.groupMoney.push({id:uid(),date:new Date().toISOString().split("T")[0],amount:amt,type:"deposit",note:depNote});
+  save();closeModal();checkAndAlert();toast("Deposited "+fmt(amt)+" to "+acct.label);
 }
 
 function checkAndAlert(){
@@ -1968,18 +1986,9 @@ function saveQuickAdd(){
     var ecard=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
     if(ecard)ecard.balance+=amt;
   }
-  // If paid with debit, deduct from account
-  if(!m.isIncome&&m.paidWith==="debit"&&m.debitAccount){
-    var dAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
-    if(dAcct){var cb=getNWBalance(dAcct,S.month);dAcct.balances[S.month]=cb-amt}
-  }
-  // If income, deposit to account
-  if(m.isIncome&&m.depositTo&&m.depositTo!=="none"){
-    var iAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.depositTo});
-    if(iAcct){var ib=getNWBalance(iAcct,S.month);iAcct.balances[S.month]=ib+amt}
-  }
   // If paid with debit, deduct from bank account
   if(m.qaType==="expense"&&m.paidWith==="debit"&&m.debitAccount){
+    tx.debitAccount=m.debitAccount;
     var debitAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
     if(debitAcct){var curD=getNWBalance(debitAcct,S.month);debitAcct.balances[S.month]=curD-amt}
   }
@@ -2193,24 +2202,36 @@ function _render(){
       }
 
       // Bill calendar - upcoming recurring expenses with due dates
-      const recurItems=[];
-      md.categories.forEach(c2=>c2.items.filter(i=>i.recurring).forEach(i=>{const isPaid=(i.transactions||[]).some(t=>t.auto&&t.confirmed);if(!isPaid)recurItems.push({label:i.label,amount:i.budgeted,cat:c2.name})}));
-      md.income.filter(i=>i.recurring).forEach(i=>{recurItems.push({label:i.label,amount:i.budgeted,cat:"Income"})});
+      var recurItems=[];
+      md.categories.forEach(function(c2){c2.items.filter(function(i){return i.recurring}).forEach(function(i){
+        var isPaid=(i.transactions||[]).some(function(t){return t.auto&&t.confirmed});
+        recurItems.push({label:i.label,amount:i.budgeted,cat:c2.name,type:'expense',paid:isPaid});
+      })});
+      md.income.filter(function(i){return i.recurring}).forEach(function(i){
+        var isPaid=(i.transactions||[]).some(function(t){return t.auto&&t.confirmed});
+        recurItems.push({label:i.label,amount:i.budgeted,cat:"Income",type:'income',paid:isPaid});
+      });
       // Also card statement dates
-      (S.data.debts?.cards||[]).filter(cd=>cd.stmtDate&&cd.balance>0).forEach(cd=>{const cDay=clampDay(cd.stmtDate,parseInt(S.month.split("-")[1])-1);recurItems.push({label:cd.name+" payment due",amount:Math.min(cd.balance,cd.minPayment||cd.balance),cat:"Card",day:cDay})});
-      // Subscriptions
-      (S.data.subscriptions||[]).forEach(sub=>{recurItems.push({label:sub.name,amount:sub.amount,cat:sub.category||"Sub",day:sub.billDay||1})});
+      (S.data.debts?.cards||[]).filter(function(cd){return cd.stmtDate&&cd.balance>0}).forEach(function(cd){var cDay=clampDay(cd.stmtDate,parseInt(S.month.split("-")[1])-1);recurItems.push({label:cd.name+" payment due",amount:Math.min(cd.balance,cd.minPayment||cd.balance),cat:"Card",day:cDay,type:'expense',paid:false})});
+      (S.data.subscriptions||[]).forEach(function(sub){recurItems.push({label:sub.name,amount:sub.amount,cat:sub.category||"Sub",day:sub.billDay||1,type:'expense',paid:false})});
 
       if(recurItems.length>0){
         const billKey="bills-main";
         const billOpen=S.expanded[billKey];
         h+=`<div class="insight view-enter" style="cursor:pointer;flex-direction:column;align-items:stretch" onclick="S.expanded['${billKey}']=!S.expanded['${billKey}'];render()">`;
-        h+=`<div style="display:flex;align-items:center;gap:10px"><span class="ins-icon">📅</span><div class="ins-body"><div class="ins-title">${recurItems.length} recurring item${recurItems.length!==1?'s':''}</div><div class="ins-sub">${billOpen?'Tap to hide':'Tap to see your fixed costs'}</div></div></div>`;
+                var unpaidR=recurItems.filter(function(b){return!b.paid}).length;
+        var paidR=recurItems.filter(function(b){return b.paid}).length;
+        h+=`<div style="display:flex;align-items:center;gap:10px"><span class="ins-icon">📅</span><div class="ins-body"><div class="ins-title">${recurItems.length} recurring item${recurItems.length!==1?'s':''}${paidR>0?' · <span style="color:var(--gn)">'+paidR+' done</span>':''}</div><div class="ins-sub">${billOpen?'Tap to hide':unpaidR>0?unpaidR+' still pending':'All confirmed ✓'}</div></div></div>`;
         if(billOpen){
           h+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">`;
-          recurItems.forEach(b=>{
-            h+=`<div class="bill-item"><span>${getCatEmoji(b.cat)} ${esc(b.label)}</span><span style="font-weight:600">${fmt(b.amount)}</span></div>`;
+          var unpaidCount=recurItems.filter(function(b){return!b.paid}).length;
+          var paidCount=recurItems.filter(function(b){return b.paid}).length;
+          recurItems.forEach(function(b){
+            var col=b.paid?'var(--gn)':b.type==='income'?'var(--gn)':'var(--tx)';
+            var amtCol=b.type==='income'?'color:var(--gn)':'color:var(--rd)';
+            h+='<div class="bill-item" style="opacity:'+(b.paid?'0.5':'1')+'"><span>'+(b.paid?'\u2713 ':'')+getCatEmoji(b.cat)+' '+esc(b.label)+'</span><span style="font-weight:600;'+amtCol+'">'+(b.type==="income"?"+":"-")+fmt(b.amount)+'</span></div>';
           });
+          if(paidCount>0)h+='<div style="font-size:11px;color:var(--gn);margin-top:4px">'+paidCount+'/'+recurItems.length+' confirmed</div>';
           h+=`</div>`;
         }
         h+=`</div>`;
@@ -3255,10 +3276,13 @@ function renderSection(items,title,catId,em,isIncome){
     if(em)h+=`<button class="xb" onclick="removeItemFromFuture('${it.id}',${catId?`'${catId}'`:'null'})">×</button>`;
     h+=`<span>${esc(it.label)}</span>`;
     if(it.recurring){
-      const autoTx=it.transactions.find(t=>t.auto);
-      const isPaid=autoTx?.confirmed;
-      if(!em&&!isIncome){
-        h+=`<button style="font-size:12px;padding:6px 12px;border-radius:8px;border:1.5px solid ${isPaid?'var(--gn)':'var(--bd)'};background:${isPaid?'rgba(140,192,99,.15)':'transparent'};color:${isPaid?'var(--gn)':'var(--t3)'};cursor:pointer;margin-left:4px;min-height:32px" onclick="event.stopPropagation();event.preventDefault();confirmPaid('${it.id}',${catId?"'"+catId+"'":'null'})">${isPaid?'✓ Paid':'Pay'}</button>`;
+      var autoTx2=it.transactions.find(function(t){return t.auto});
+      var isPaid2=autoTx2&&autoTx2.confirmed;
+      if(!em){
+        var payColor=isPaid2?'var(--gn)':'var(--bd)';
+        var payBg=isPaid2?(isIncome?'rgba(46,213,115,.15)':'rgba(140,192,99,.15)'):'transparent';
+        var payLabel=isPaid2?(isIncome?'✓ Received':'✓ Paid'):(isIncome?'Log':'Pay');
+        h+=`<button style="font-size:12px;padding:6px 12px;border-radius:8px;border:1.5px solid ${payColor};background:${payBg};color:${isPaid2?'var(--gn)':'var(--t3)'};cursor:pointer;margin-left:4px;min-height:32px" onclick="event.stopPropagation();event.preventDefault();confirmPaid('${it.id}',${catId?"'"+catId+"'":'null'})">${payLabel}</button>`;
       } else {
         h+=`<span class="rec-badge">↻</span>`;
       }
@@ -3278,11 +3302,17 @@ function renderSection(items,title,catId,em,isIncome){
     }
     h+=`</div><div class="rw-n">`;
 
-    // Amount display
+    // Amount display - green for income, red for over-budget expenses
+    var amtColor='';
+    if(isIncome&&tot>0)amtColor='color:var(--gn)';
+    else if(!isIncome&&iov)amtColor='color:var(--rd)';
+    var catArg=catId?"'"+catId+"'":"null";
     if(it.recurring&&!em){
-      h+=`<span class="act" onclick="openTxModal('${it.id}',${catId?`'${catId}'`:'null'},${isIncome})">${fmt(tot)}</span>`;
+      var autoTx3=it.transactions.find(function(t){return t.auto});
+      var isPaid3=autoTx3&&autoTx3.confirmed;
+      h+='<span class="act" style="'+amtColor+(isPaid3?';opacity:.6':'')+'" onclick="openTxModal(\''+it.id+'\','+catArg+','+isIncome+')">'+(isPaid3?'\u2713 ':'')+fmt(tot)+'</span>';
     } else {
-      h+=`<span class="act ${tot===0?'z':''}" style="${iov&&!isIncome?'color:var(--rd)':''}" onclick="openTxModal('${it.id}',${catId?`'${catId}'`:'null'},${isIncome})">${tot===0?(isIncome?"+log":"+add"):fmt(tot)}</span>`;
+      h+='<span class="act '+(tot===0?'z':'')+'" style="'+amtColor+'" onclick="openTxModal(\''+it.id+'\','+catArg+','+isIncome+')">'+(tot===0?(isIncome?'+log':'+add'):fmt(tot))+'</span>';
     }
 
     if(em){
@@ -3466,18 +3496,18 @@ function renderModal(){
         h+=`</div></div>`;
       }
     }
-    // Amount
+    // Amount, Date, Note, Tags — hidden for Payday tab (it has its own per-source inputs)
     const today=new Date().toISOString().split('T')[0];
-    h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:24px;font-weight:700;text-align:center;padding:16px" value="${m._amt||''}" oninput="S.modal._amt=this.value;updateBalPreview()" onkeydown="if(event.key==='Enter'&&document.getElementById('m-note'))document.getElementById('m-note').focus()">`;
-    h+=`<label>Date</label><input id="m-date" type="date" value="${m._date||new Date().toISOString().split('T')[0]}" value="${m._date||today}" style="padding:10px;border-radius:10px;border:1.5px solid var(--bd);background:var(--c1);color:var(--tx);font-size:14px;width:100%;box-sizing:border-box" oninput="S.modal._date=this.value">`;
-    // Note
-    if(qaType==="payment"){
-      h+=`<label>Note (optional)</label><input id="m-note" maxlength="100" placeholder="e.g. Monthly payment, extra payment" value="${esc(m._note||'')}">`;
-    } else {
-      h+=`<label>${qaType==='income'?'Source description':'What\'s it for?'}</label><input id="m-note" maxlength="100" placeholder="${qaType==='income'?'e.g. Commission, freelance gig':'e.g. Uber Eats, cat food, bar tab'}" value="${esc(m._note||'')}">`;
+    if(qaType!=="payday"){
+      h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:24px;font-weight:700;text-align:center;padding:16px" value="${m._amt||''}" oninput="S.modal._amt=this.value;updateBalPreview()" onkeydown="if(event.key==='Enter'&&document.getElementById('m-note'))document.getElementById('m-note').focus()">`;
+      h+=`<label>Date</label><input id="m-date" type="date" value="${m._date||new Date().toISOString().split('T')[0]}" style="padding:10px;border-radius:10px;border:1.5px solid var(--bd);background:var(--c1);color:var(--tx);font-size:14px;width:100%;box-sizing:border-box" oninput="S.modal._date=this.value">`;
+      if(qaType==="payment"){
+        h+=`<label>Note (optional)</label><input id="m-note" maxlength="100" placeholder="e.g. Monthly payment, extra payment" value="${esc(m._note||'')}">`;
+      } else {
+        h+=`<label>${qaType==='income'?'Source description':'What\'s it for?'}</label><input id="m-note" maxlength="100" placeholder="${qaType==='income'?'e.g. Commission, freelance gig':'e.g. Uber Eats, cat food, bar tab'}" value="${esc(m._note||'')}">`;
+      }
+      if(qaType!=="payment")h+=`<label>Tags (optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work">`;
     }
-    // Tags
-    if(qaType!=="payment")h+=`<label>Tags (optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work">`;
     // Category/item picker
     if(qaType==="expense"){
       h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Category</label><div class="qa-cats">`;
@@ -3613,12 +3643,21 @@ function renderModal(){
       }
       h+=`</div>`;
     } else if(qaType==="deposit"){
-      const depAccts=(S.data.networth?.accounts||[]).filter(a=>a.label!=="Unsorted");
+      var depAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=="Unsorted"});
       if(depAccts.length===0){
         h+=`<div style="text-align:center;padding:20px"><div style="color:var(--t3);margin-bottom:10px">No accounts yet</div><button class="add" onclick="openInlineAccount('deposit')">+ Add an account</button></div>`;
       } else {
-        h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Deposit to</label><div class="qa-cats">`;
-        depAccts.forEach(a=>{
+        // Transfer from
+        var xferFrom=m.xferFrom||'new';
+        h+=`<div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Source</label><div class="qa-cats">`;
+        h+=`<button class="qa-cat ${xferFrom==='new'?'on':''}" onclick="saveModalInputs();S.modal.xferFrom='new';render()">New money</button>`;
+        depAccts.forEach(function(a){
+          h+=`<button class="qa-cat ${xferFrom===a.id?'on':''}" onclick="saveModalInputs();S.modal.xferFrom='${a.id}';render()">${esc(a.label)}</button>`;
+        });
+        h+=`</div></div>`;
+        // Deposit to
+        h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Deposit to</label><div class="qa-cats">`;
+        depAccts.filter(function(a){return a.id!==xferFrom}).forEach(function(a){
           h+=`<button class="qa-cat ${m.depositAcct===a.id?'on':''}" onclick="saveModalInputs();S.modal.depositAcct='${a.id}';render()">${esc(a.label)} <span style="font-size:11px;color:var(--gn)">${fmt(getNWBalance(a,S.month))}</span></button>`;
         });
         h+=`<button class="qa-cat" style="border-style:dashed;color:var(--ac)" onclick="openInlineAccount('deposit')">+ Add account</button>`;
@@ -4038,18 +4077,9 @@ function saveTx(){
     var ecard=(S.data.debts?.cards||[]).find(function(cd){return cd.id===m.paidWith});
     if(ecard)ecard.balance+=amt;
   }
-  // If paid with debit, deduct from account
-  if(!m.isIncome&&m.paidWith==="debit"&&m.debitAccount){
-    var dAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
-    if(dAcct){var cb=getNWBalance(dAcct,S.month);dAcct.balances[S.month]=cb-amt}
-  }
-  // If income, deposit to account
-  if(m.isIncome&&m.depositTo&&m.depositTo!=="none"){
-    var iAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.depositTo});
-    if(iAcct){var ib=getNWBalance(iAcct,S.month);iAcct.balances[S.month]=ib+amt}
-  }
   // If paid with debit, deduct from bank account
   if(m.qaType==="expense"&&m.paidWith==="debit"&&m.debitAccount){
+    tx.debitAccount=m.debitAccount;
     var debitAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===m.debitAccount});
     if(debitAcct){var curD=getNWBalance(debitAcct,S.month);debitAcct.balances[S.month]=curD-amt}
   }
@@ -4063,17 +4093,27 @@ function saveTx(){
 }
 
 function removeTxById(itemId,catId,txId){
-  const md=cm();let item=null;
-  if(catId){const cat=findById(md.categories,catId);if(cat)item=findById(cat.items,itemId)}
+  var md=cm();var item=null;
+  if(catId){var cat=findById(md.categories,catId);if(cat)item=findById(cat.items,itemId)}
   else{item=findById(md.income,itemId)}
   if(!item)return;
-  const txIdx=item.transactions.findIndex(t=>t.id===txId);
+  var txIdx=item.transactions.findIndex(function(t){return t.id===txId});
   if(txIdx<0)return;
-  const tx=item.transactions[txIdx];
-  // Reverse card balance if paid with a card
+  var tx=item.transactions[txIdx];
+  // Reverse credit card balance
   if(tx.paidWith&&tx.paidWith!=="cash"&&tx.paidWith!=="debit"){
-    const card=S.data.debts?.cards?.find(cd=>cd.id===tx.paidWith);
+    var card=(S.data.debts?.cards||[]).find(function(cd){return cd.id===tx.paidWith});
     if(card)card.balance=Math.max(0,card.balance-tx.amount);
+  }
+  // Reverse debit account deduction
+  if(tx.paidWith==="debit"&&tx.debitAccount){
+    var dAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===tx.debitAccount});
+    if(dAcct){var cb=getNWBalance(dAcct,S.month);dAcct.balances[S.month]=cb+tx.amount}
+  }
+  // Reverse income deposit
+  if(!catId&&tx.depositTo&&tx.depositTo!=="none"){
+    var iAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===tx.depositTo});
+    if(iAcct){var ib=getNWBalance(iAcct,S.month);iAcct.balances[S.month]=ib-tx.amount}
   }
   item.transactions.splice(txIdx,1);
   save();render();
