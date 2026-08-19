@@ -775,7 +775,7 @@ function updateTemplateItem(itemId,catId,updates){
       target.transactions=target.transactions||[];
       if(isRec){
         const ai=target.transactions.findIndex(t=>t.auto);
-        const atx=makeAutoTx(amt,target.note,mk2);
+        var atx=makeAutoTx(0,target.note||target.label,mk2);
         if(ai>=0)target.transactions[ai]=atx;else target.transactions.unshift(atx);
       } else {
         target.transactions=target.transactions.filter(t=>!t.auto);
@@ -1049,21 +1049,28 @@ function toggleRecurring(itemId,catId){
 
 function doConfirmPay(){
   var m=S.modal;if(!m||m.type!=='confirmpay')return;
-  var md=cm();var item=null;
+  var md=cm();var item=null;var isIncome=m.isIncome;
   if(m.catId){var cat=findById(md.categories,m.catId);if(cat)item=findById(cat.items,m.itemId)}
   else{item=findById(md.income,m.itemId)}
   if(!item||!item.recurring)return;
   var autoTx=item.transactions.find(function(t){return t.auto});
-  if(!autoTx)return;
-  autoTx.confirmed=true;
-  autoTx.amount=item.budgeted;
-  autoTx.isoDate=new Date().toISOString().split('T')[0];
-  autoTx.date=(new Date().getMonth()+1)+'/'+new Date().getDate();
-  autoTx.paidWith=m.paidWith||'cash';
-  // Balance tracking
+  var d2=new Date();
+  var amt=m.amount||item.budgeted;
+  // Add as real transaction
+  var newTx={id:uid(),date:(d2.getMonth()+1)+'/'+d2.getDate(),isoDate:d2.toISOString().split('T')[0],amount:amt,note:isIncome?'Payday':'Payment',tags:[],auto:false,paidWith:m.paidWith||'cash'};
+  if(m.debitAccount)newTx.debitAccount=m.debitAccount;
+  if(m.depositTo)newTx.depositTo=m.depositTo;
+  item.transactions.push(newTx);
+  // Check if total >= budgeted to auto-confirm
+  var totalLogged=item.transactions.filter(function(t){return!t.auto}).reduce(function(s,t){return s+t.amount},0);
+  if(autoTx){
+    if(totalLogged>=item.budgeted){autoTx.confirmed=true;autoTx.amount=0}
+    else{autoTx.confirmed=false;autoTx.amount=0}
+  }
+  // Balance tracking for debt items
   if(item._balance!==undefined&&item._balance>0){
     if(item._apr>0){var moI=item._balance*(item._apr/100/12);item._balance+=moI}
-    item._balance=Math.max(0,item._balance-item.budgeted);
+    item._balance=Math.max(0,item._balance-amt);
   }
   // Move money based on type
   if(m.isIncome){
@@ -1907,19 +1914,21 @@ function logPayday(incId){
   if(amt===0){toast("Enter an amount");return}
   var depTo=S.modal['_pdDep_'+incId]||'none';
   var d=new Date();
-  // If recurring with auto-tx, confirm it
+  // Always add as a new transaction
+  inc.transactions.push({id:uid(),date:(d.getMonth()+1)+'/'+d.getDate(),isoDate:d.toISOString().split('T')[0],amount:amt,note:'Payday',tags:[],auto:false,depositTo:depTo});
+  // Auto-confirm recurring when total >= budgeted
   if(inc.recurring){
     var autoTx=inc.transactions.find(function(t){return t.auto});
-    if(autoTx&&!autoTx.confirmed){
-      autoTx.confirmed=true;
-      autoTx.amount=amt;
-      autoTx.isoDate=d.toISOString().split('T')[0];
-      autoTx.date=(d.getMonth()+1)+'/'+d.getDate();
-    } else {
-      inc.transactions.push({id:uid(),date:(d.getMonth()+1)+'/'+d.getDate(),isoDate:d.toISOString().split('T')[0],amount:amt,note:'Payday',tags:[],auto:false});
+    var totalLogged=inc.transactions.filter(function(t){return!t.auto}).reduce(function(s,t){return s+t.amount},0);
+    if(autoTx){
+      if(totalLogged>=inc.budgeted){
+        autoTx.confirmed=true;
+        autoTx.amount=0;
+      } else {
+        autoTx.confirmed=false;
+        autoTx.amount=0;
+      }
     }
-  } else {
-    inc.transactions.push({id:uid(),date:(d.getMonth()+1)+'/'+d.getDate(),isoDate:d.toISOString().split('T')[0],amount:amt,note:'Payday',tags:[],auto:false});
   }
   // Deposit to account
   if(depTo&&depTo!=='none'){
@@ -2065,21 +2074,6 @@ function _render(){
       // === MONEY IN DETAIL ===
       h+=`<div class="cnt view-enter" style="padding-top:8px">`;
       h+=`<button class="back-btn" onclick="S.budgetView='dash';S.edit=false;render()">‹ Budget</button>`;
-      // Quick log buttons
-      var unloggedIncome=md.income.filter(function(inc){
-        if(!inc.recurring)return false;
-        var autoTx=inc.transactions.find(function(t2){return t2.auto});
-        return autoTx&&!autoTx.confirmed;
-      });
-      if(unloggedIncome.length>0){
-        h+=`<div style="background:var(--c1);border-radius:var(--radius);padding:14px 16px;margin:0 0 12px;border:1px solid var(--bd)">`;
-        h+=`<div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Quick log</div>`;
-        h+=`<div style="display:flex;flex-wrap:wrap;gap:6px">`;
-        unloggedIncome.forEach(function(inc){
-          h+=`<button style="flex:1;min-width:140px;padding:12px 14px!important;background:rgba(46,213,115,.06)!important;border:1.5px solid rgba(46,213,115,.2)!important;border-radius:10px!important;color:var(--tx)!important;font-size:13px!important;text-align:left;cursor:pointer" onclick="confirmPaid('${inc.id}',null)"><div style="font-weight:600">${esc(inc.label)}</div><div style="font-size:11px;color:var(--gn);margin-top:2px">${fmt(inc.budgeted)}</div></button>`;
-        });
-        h+=`</div></div>`;
-      }
       h+=`<div class="sec-in">`;
       h+=renderSection(md.income,"Money In",null,em,true);
       h+=`</div></div>`;
@@ -2088,28 +2082,14 @@ function _render(){
       // === MONEY OUT DETAIL ===
       h+=`<div class="cnt view-enter" style="padding-top:8px">`;
       h+=`<button class="back-btn" onclick="S.budgetView='dash';S.edit=false;render()">‹ Budget</button>`;
-      // Quick buttons
-      const qbs=S.data.quickButtons||[];
-      if(qbs.length>0||em){
-        h+=`<div style="margin-bottom:4px;font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:1px">Quick log</div>`;
-        h+=`<div class="qb-row">`;
-        qbs.forEach((qb,qi)=>{
-          if(em){
-            h+=`<button class="qb" onclick="removeQuickButton(${qi})">× ${esc(qb.label)} <span class="qb-amt">${fmt(qb.amount)}</span></button>`;
-          } else {
-            h+=`<button class="qb" onclick="fireQuickButton(${qi})">${esc(qb.label)} <span class="qb-amt">${fmt(qb.amount)}</span></button>`;
-          }
-        });
-        if(em)h+=`<button class="qb-add" onclick="openQuickButtonModal()">+ Shortcut</button>`;
-        h+=`</div>`;
-      }
+
       // Categories
       h+=`<div class="sec-out">`;
       md.categories.forEach(cat=>{
         h+=renderSection(cat.items,cat.name,cat.id,em,false);
       });
       if(em)h+=`<button class="add" onclick="addCategory()">+ Add category</button>`;
-      if(!em&&qbs.length===0)h+=`<div style="font-size:12px;color:var(--t3);margin-top:8px;text-align:center">Tip: In edit mode, add Quick Log shortcuts for purchases you make often</div>`;
+
       h+=`</div></div>`;
 
     } else {
@@ -3276,13 +3256,17 @@ function renderSection(items,title,catId,em,isIncome){
     if(em)h+=`<button class="xb" onclick="removeItemFromFuture('${it.id}',${catId?`'${catId}'`:'null'})">×</button>`;
     h+=`<span>${esc(it.label)}</span>`;
     if(it.recurring){
-      var autoTx2=it.transactions.find(function(t){return t.auto});
-      var isPaid2=autoTx2&&autoTx2.confirmed;
+      var totalLogged2=it.transactions.filter(function(t){return!t.auto}).reduce(function(s,t){return s+t.amount},0);
+      var isPaid2=totalLogged2>=it.budgeted&&it.budgeted>0;
+      var isPartial2=totalLogged2>0&&totalLogged2<it.budgeted;
       if(!em){
         var payColor=isPaid2?'var(--gn)':'var(--bd)';
         var payBg=isPaid2?(isIncome?'rgba(46,213,115,.15)':'rgba(140,192,99,.15)'):'transparent';
-        var payLabel=isPaid2?(isIncome?'✓ Received':'✓ Paid'):(isIncome?'Log':'Pay');
-        h+=`<button style="font-size:12px;padding:6px 12px;border-radius:8px;border:1.5px solid ${payColor};background:${payBg};color:${isPaid2?'var(--gn)':'var(--t3)'};cursor:pointer;margin-left:4px;min-height:32px" onclick="event.stopPropagation();event.preventDefault();confirmPaid('${it.id}',${catId?"'"+catId+"'":'null'})">${payLabel}</button>`;
+        var payLabel=isPaid2?(isIncome?'✓ Received':'✓ Paid'):isPartial2?(fmt(totalLogged2)+' / '+fmt(it.budgeted)):(isIncome?'Log':'Pay');
+        var payBtnColor=isPaid2?'var(--gn)':isPartial2?'var(--ac)':'var(--t3)';
+        var payBtnBg=isPaid2?(isIncome?'rgba(46,213,115,.15)':'rgba(140,192,99,.15)'):isPartial2?'rgba(108,99,255,.1)':'transparent';
+        var payBtnBorder=isPaid2?'var(--gn)':isPartial2?'var(--ac)':'var(--bd)';
+        h+=`<button style="font-size:12px;padding:6px 12px;border-radius:8px;border:1.5px solid ${payBtnBorder};background:${payBtnBg};color:${payBtnColor};cursor:pointer;margin-left:4px;min-height:32px" onclick="event.stopPropagation();event.preventDefault();confirmPaid('${it.id}',${catId?"'"+catId+"'":'null'})">${payLabel}</button>`;
       } else {
         h+=`<span class="rec-badge">↻</span>`;
       }
@@ -3308,8 +3292,7 @@ function renderSection(items,title,catId,em,isIncome){
     else if(!isIncome&&iov)amtColor='color:var(--rd)';
     var catArg=catId?"'"+catId+"'":"null";
     if(it.recurring&&!em){
-      var autoTx3=it.transactions.find(function(t){return t.auto});
-      var isPaid3=autoTx3&&autoTx3.confirmed;
+      var isPaid3=isPaid2;
       h+='<span class="act" style="'+amtColor+(isPaid3?';opacity:.6':'')+'" onclick="openTxModal(\''+it.id+'\','+catArg+','+isIncome+')">'+(isPaid3?'\u2713 ':'')+fmt(tot)+'</span>';
     } else {
       h+='<span class="act '+(tot===0?'z':'')+'" style="'+amtColor+'" onclick="openTxModal(\''+it.id+'\','+catArg+','+isIncome+')">'+(tot===0?(isIncome?'+log':'+add'):fmt(tot))+'</span>';
@@ -3613,20 +3596,23 @@ function renderModal(){
       } else {
         pdMd.income.forEach(function(inc){
           var autoTx=inc.recurring?inc.transactions.find(function(t2){return t2.auto}):null;
-          var logged=autoTx&&autoTx.confirmed;
           var actual=txTotal(inc);
+          var logged=actual>=inc.budgeted;
           h+=`<div style="background:var(--c1);border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid var(--bd)">`;
           h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:15px;font-weight:600">${esc(inc.label)}</span>`;
           if(logged){
-            h+=`<span style="font-size:13px;font-weight:600;color:var(--gn)">Logged ${fmt(actual)} ✓</span>`;
+            h+=`<span style="font-size:13px;font-weight:600;color:var(--gn)">✓ ${fmt(actual)}</span>`;
+          } else if(actual>0){
+            h+=`<span style="font-size:13px;color:var(--ac)">${fmt(actual)} / ${fmt(inc.budgeted)}</span>`;
           } else {
-            h+=`<span style="font-size:13px;color:var(--t3)">${fmt(actual)} / ${fmt(inc.budgeted)}</span>`;
+            h+=`<span style="font-size:13px;color:var(--t3)">$0 / ${fmt(inc.budgeted)}</span>`;
           }
           h+=`</div>`;
           if(!logged){
-            // Amount input (default to budgeted)
+            // Amount input (default to remaining amount)
             var pdKey='_pd_'+inc.id;
-            h+=`<div style="display:flex;gap:8px;margin-bottom:8px"><input id="pd-amt-${inc.id}" type="number" inputmode="decimal" value="${m[pdKey]||inc.budgeted||''}" placeholder="Amount" style="flex:1;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${pdKey}']=this.value"></div>`;
+            var remaining=Math.max(0,inc.budgeted-actual);
+            h+=`<div style="display:flex;gap:8px;margin-bottom:8px"><input id="pd-amt-${inc.id}" type="number" inputmode="decimal" value="${m[pdKey]||remaining||''}" placeholder="Amount" style="flex:1;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${pdKey}']=this.value"></div>`;
             // Deposit to
             var pdDep=m['_pdDep_'+inc.id]||'';
             h+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px">Deposit to</div>`;
@@ -4155,8 +4141,8 @@ function renameCatUI(el,catId){
 function resetMonth(){
   customConfirm("Reset actuals? Recurring items keep values?",()=>{
     const md=cm();
-    md.income.forEach(i=>{if(i.recurring){i.transactions=[makeAutoTx(i.budgeted,i.note,S.month)]}else{i.transactions=[]}});
-    md.categories.forEach(c2=>c2.items.forEach(i=>{if(i.recurring){i.transactions=[makeAutoTx(i.budgeted,i.note,S.month)]}else{i.transactions=[]}}));
+    md.income.forEach(function(i){if(i.recurring){i.transactions=[makeAutoTx(0,i.note||i.label,S.month)]}else{i.transactions=[]}});
+    md.categories.forEach(function(c2){c2.items.forEach(function(i){if(i.recurring){i.transactions=[makeAutoTx(0,i.note||i.label,S.month)]}else{i.transactions=[]}})});
     save();render();
   });
 }
@@ -4792,7 +4778,7 @@ const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true
   } else if(step===7){
     h+=`<div class="ob-top">${backBtn(6)}<div class="ob-step">Quick tour — 1 of 3</div><h2>Your dashboard</h2><div style="max-width:300px;text-align:left;line-height:1.7;font-size:14px;color:var(--t2)"><p>📊 <b style="color:var(--tx)">Budget tab</b> — your monthly overview</p><p>💰 <b style="color:var(--tx)">Money In</b> — track all income</p><p>💸 <b style="color:var(--tx)">Money Out</b> — see where it goes</p><p>↻ <b style="color:var(--tx)">Recurring</b> — tap [Pay] to confirm each month</p></div><button class="ob-btn" onmousedown="event.preventDefault();S.obStep=8;render()">Next</button></div>`;
   } else if(step===8){
-    h+=`<div class="ob-top">${backBtn(7)}<div class="ob-step">Quick tour — 2 of 3</div><h2>Logging</h2><div style="max-width:300px;text-align:left;line-height:1.7;font-size:14px;color:var(--t2)"><p><span style="display:inline-flex;width:26px;height:26px;background:var(--ac);color:var(--tx);border-radius:50%;align-items:center;justify-content:center;font-size:14px;vertical-align:middle">+</span> Quick-add expense, income, or payment</p><p>⚡ <b style="color:var(--tx)">Quick Log</b> — one-tap for daily buys</p><p>✏️ <b style="color:var(--tx)">Edit</b> — adjust budgets anytime</p></div><button class="ob-btn" onmousedown="event.preventDefault();S.obStep=9;render()">Next</button></div>`;
+    h+=`<div class="ob-top">${backBtn(7)}<div class="ob-step">Quick tour — 2 of 3</div><h2>Logging</h2><div style="max-width:300px;text-align:left;line-height:1.7;font-size:14px;color:var(--t2)"><p><span style="display:inline-flex;width:26px;height:26px;background:var(--ac);color:var(--tx);border-radius:50%;align-items:center;justify-content:center;font-size:14px;vertical-align:middle">+</span> Quick-add expense, income, or payment</p><p>✏️ <b style="color:var(--tx)">Edit</b> — adjust budgets anytime</p></div><button class="ob-btn" onmousedown="event.preventDefault();S.obStep=9;render()">Next</button></div>`;
   } else if(step===9){
     h+=`<div class="ob-top">${backBtn(8)}<div class="ob-step">Quick tour — 3 of 3</div><h2>Other tabs</h2><div style="max-width:300px;text-align:left;line-height:1.7;font-size:14px;color:var(--t2)"><p>💳 <b style="color:var(--tx)">Cards</b> — debt payoff plan</p><p>👥 <b style="color:var(--tx)">Group</b> — split with roommates</p><p>🎯 <b style="color:var(--tx)">Goals</b> — savings targets</p><p>📊 <b style="color:var(--tx)">Trends</b> — spending charts</p></div><button class="ob-btn" onmousedown="event.preventDefault();S.obStep=10;render()">Got it!</button></div>`;
   } else if(step===10){
