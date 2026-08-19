@@ -3436,9 +3436,26 @@ function renderModal(){
       <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveGoalEdit(${m.gi})">Save</button></div>`;
   }
   else if(m.type==="goalcurrent"){
-    h+=`<h3>${esc(m.label)}</h3>
-      <label>Current balance</label><input id="m-inp" type="number" inputmode="decimal" value="${m.value}" onkeydown="if(event.key==='Enter')saveGoalCurrent(${m.gi})">
-      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveGoalCurrent(${m.gi})">Save</button></div>`;
+    var g2=S.data.goals.active[m.gi];
+    var isPayoff=g2&&g2.type==="payoff";
+    var progress=g2?g2.current:0;
+    var remaining=g2?(isPayoff?g2.current:g2.target-g2.current):0;
+    h+=`<h3>${esc(m.label)}</h3>`;
+    h+=`<div style="text-align:center;padding:12px 0;margin-bottom:12px;background:var(--c1);border-radius:12px;border:1px solid var(--bd)">`;
+    if(isPayoff){
+      h+=`<div style="font-size:11px;color:var(--t3)">Remaining balance</div>`;
+      h+=`<div style="font-size:24px;font-weight:800;color:var(--rd)">${fmt(g2.current)}</div>`;
+    } else {
+      h+=`<div style="font-size:11px;color:var(--t3)">Saved so far</div>`;
+      h+=`<div style="font-size:24px;font-weight:800;color:var(--gn)">${fmt(g2.current)} <span style="font-size:14px;color:var(--t3)">/ ${fmt(g2.target)}</span></div>`;
+    }
+    h+=`</div>`;
+    h+=`<label>${isPayoff?'How much did you pay?':'How much did you save?'}</label>`;
+    h+=`<input id="m-inp" type="number" inputmode="decimal" placeholder="0" style="font-size:20px;text-align:center;padding:14px" onkeydown="if(event.key==='Enter')saveGoalCurrent(${m.gi})">`;
+    if(isPayoff){
+      h+=`<div id="goal-preview" style="font-size:12px;color:var(--t2);margin-top:4px;text-align:center"></div>`;
+    }
+    h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveGoalCurrent(${m.gi})">${isPayoff?'Log payment':'Log savings'}</button></div>`;
   }
   else if(m.type==="nwbalance"){
     h+=`<h3>${esc(m.label)}</h3>
@@ -4146,7 +4163,7 @@ function resetMonth(){
 // Goals
 function openGoalModal(){S._modalFresh=true;S.modal={type:"newgoal"};render()}
 function openGoalEditModal(gi){S.modal={type:"editgoal",gi};render()}
-function openGoalCurrentModal(gi){const g=S.data.goals.active[gi];S.modal={type:"goalcurrent",label:g.label,value:g.current,gi};render()}
+function openGoalCurrentModal(gi){var g=S.data.goals.active[gi];S.modal={type:"goalcurrent",label:g.label,gi:gi};render()}
 
 function saveNewGoal(){
   const label=document.getElementById("m-label").value.trim()||"Goal";
@@ -4166,11 +4183,16 @@ function saveGoalEdit(gi){
   save();closeModal();
 }
 function saveGoalCurrent(gi){
-  const v=parseFloat(document.getElementById("m-inp").value)||0;
-  S.data.goals.active[gi].current=v;
-  const g=S.data.goals.active[gi];
+  var v=parseFloat(document.getElementById("m-inp").value)||0;
+  if(v===0){toast("Enter an amount");return}
+  var g=S.data.goals.active[gi];
+  if(g.type==="payoff"){
+    g.current=Math.max(0,g.current-v);
+  } else {
+    g.current=Math.min(g.target,(g.current||0)+v);
+  }
   if((g.type==="payoff"&&g.current<=0)||(g.type==="savings"&&g.current>=g.target)){completeGoal(gi)}
-  else{save();closeModal()}
+  else{save();closeModal();toast(g.label+": "+fmt(v)+" logged")}
 }
 function completeGoal(gi){const g=S.data.goals.active.splice(gi,1)[0];g.completed=Date.now();S.data.goals.completed.unshift(g);save();S.modal=null;render()}
 function deleteGoal(gi){customConfirm("Delete this goal?",()=>{S.data.goals.active.splice(gi,1);save();render()})}
