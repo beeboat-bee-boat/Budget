@@ -550,8 +550,8 @@ function startOver(){
   clearTimeout(_saveTimer);
   if(dbRef){try{dbRef.off()}catch(e){}}
   dbRef=null;
-  S.data=null;
-  S.phase="pin";
+  // Show wiping message
+  try{document.getElementById('app').innerHTML='<div style="padding:60px 20px;text-align:center;font-family:sans-serif;color:#8b8ba3"><div style="font-size:24px;margin-bottom:12px">Clearing data...</div></div>'}catch(e){}
 
   // Delete Firebase data
   var uid2=S.firebaseUser?S.firebaseUser.uid:null;
