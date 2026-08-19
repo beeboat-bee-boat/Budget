@@ -2193,7 +2193,9 @@ function _render(){
       // Budget calculation
       const md3=cm();
       const totalIncome=md3.income.reduce((s,x)=>s+txTotal(x),0)||md3.income.reduce((s,x)=>s+x.budgeted,0);
-      const totalExpense=md3.categories.reduce((s,c2)=>s+c2.items.reduce((ss,x)=>ss+x.budgeted,0),0);
+      var totalBudgeted=md3.categories.reduce(function(s,c2){return s+c2.items.reduce(function(ss,x){return ss+x.budgeted},0)},0);
+      var totalActual=md3.categories.reduce(function(s,c2){return s+c2.items.reduce(function(ss,x){return ss+txTotal(x)},0)},0);
+      var totalExpense=totalActual>0?totalActual:totalBudgeted;
       const available=Math.max(0,totalIncome-totalExpense);
 
       // Debt-to-income bracket
@@ -2239,7 +2241,7 @@ function _render(){
           // 4. When a card is paid off, its min payment frees up (already handled by budget)
           sc.forEach(cd2=>{if(cd2.bal<0.01)cd2.bal=0});
         }
-        return{months:mo,interest:Math.round(totalInt)};
+        return{months:mo,interest:Math.min(Math.round(totalInt),9999999)};
       }
       // Old API compat
       function simPayoff(monthlyExtra){return simPayoffBudget(totalMin+monthlyExtra).months}
@@ -2294,9 +2296,13 @@ function _render(){
 
       // Shortfall analysis: if requiredPay > available, find what to cut
       const shortfall=Math.max(0,requiredPay-available);
-      const cuttable=[];
-      md3.categories.forEach(cat=>{cat.items.forEach(it=>{
-        if(!it.recurring&&it.budgeted>0)cuttable.push({label:it.label,cat:cat.name,amount:it.budgeted})
+      var cuttable=[];
+      md3.categories.forEach(function(cat){cat.items.forEach(function(it){
+        if(!it.recurring){
+          var spent=txTotal(it);
+          var amt=spent>0?spent:it.budgeted;
+          if(amt>0)cuttable.push({label:it.label,cat:cat.name,amount:amt,isActual:spent>0})
+        }
       })});
       cuttable.sort((a,b)=>b.amount-a.amount);
 
@@ -2339,7 +2345,7 @@ function _render(){
       // Big payoff card
       h+=`<div style="background:${shortfall>0?'rgba(224,112,85,.06)':'rgba(140,192,99,.06)'};border:1px solid ${shortfall>0?'rgba(224,112,85,.15)':'rgba(140,192,99,.15)'};border-radius:14px;padding:14px;margin-bottom:10px">`;
       h+=`<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:22px;font-weight:800">${fmt(requiredPay)}<span style="font-size:13px;font-weight:500;color:var(--t2)">/mo</span></span><span style="font-size:12px;color:var(--t2)">debt-free by ${MO[targetDate.getMonth()]} ${targetDate.getFullYear()}</span></div>`;
-      h+=`<div style="font-size:12px;color:var(--t2);margin-top:4px">${fmt(interestAtTarget)} interest · ${fmt(totalMin)}/mo in minimums</div>`;
+      h+=`<div style="font-size:12px;color:var(--t2);margin-top:4px">${interestAtTarget>999999?"$999,999+":fmt(interestAtTarget)} interest · ${fmt(totalMin)}/mo in minimums</div>`;
 
       if(shortfall>0&&cuttable.length>0){
         // Suggest cuts
@@ -2350,7 +2356,7 @@ function _render(){
           if(running>=shortfall)return;
           const cut=Math.min(item.amount,shortfall-running);
           running+=cut;
-          h+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>${esc(item.label)} <span style="color:var(--t3)">(${esc(item.cat)})</span></span><span style="color:var(--rd)">-${fmt(cut)}/mo</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>${esc(item.label)} <span style="color:var(--t3)">(${esc(item.cat)})${item.isActual?' actual':' budget'}</span></span><span style="color:var(--rd)">-${fmt(cut)}/mo</span></div>`;
         });
         if(running>=shortfall)h+=`<div style="font-size:12px;color:var(--gn);margin-top:6px">Cutting these covers the gap ✓</div>`;
         else h+=`<div style="font-size:12px;color:var(--rd);margin-top:6px">Still ${fmt(shortfall-running)} short — consider a longer timeline or extra income</div>`;
@@ -2363,7 +2369,7 @@ function _render(){
       h+=`</div>`;
 
       // Minimums-only comparison
-      h+=`<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Paying just the minimum: ${monthsMinOnly<120?monthsMinOnly+' months':'10+ years'} · ${fmt(totalInterestMin)} in interest</div>`;
+      h+=`<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Paying just the minimum: ${monthsMinOnly<120?monthsMinOnly+' months':'10+ years'} · ${totalInterestMin>999999?'$999,999+':fmt(totalInterestMin)} in interest</div>`;
 
       // === PAYOFF PROJECTION CHART ===
       // Generate month-by-month data
