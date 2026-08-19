@@ -1119,7 +1119,7 @@ async function saveNewCreds(){
     }
     // Reserve new username, release old
     if(oldUser&&oldUser!==user.toLowerCase())await db.ref('usernames/'+oldUser).remove();
-    await db.ref('usernames/'+user.toLowerCase()).set(S.pin);
+    await db.ref('usernames/'+user.toLowerCase()).set({code:S.pin,passHash:await sha(pass)});
   }
   // Update credentials
   var newCode=await deriveCode(user,pass);
@@ -1148,7 +1148,7 @@ async function changeUsername(){
     if(taken.exists()&&taken.val()!==S.pin){if(errEl)errEl.textContent='Username already taken';return}
     var oldUser=(S.data.userName||'').toLowerCase();
     if(oldUser)await db.ref('usernames/'+oldUser).remove();
-    await db.ref('usernames/'+user.toLowerCase()).set(S.pin);
+    await db.ref('usernames/'+user.toLowerCase()).set({code:S.pin,passHash:await sha(pass)});
   }
   // Derive new code with new username + existing password
   var newCode=await deriveCode(user,pass);
@@ -3634,19 +3634,21 @@ async function doLogin(){
   try{
     var code=await deriveCode(user,pass);
     if(db){
+      // Verify username+password match
+      var usnap=await db.ref('usernames/'+user).once('value');
+      if(usnap.exists()){
+        var udata=usnap.val();
+        var storedPassHash=typeof udata==='object'?udata.passHash:null;
+        if(storedPassHash){
+          var inputPassHash=await sha(pass);
+          if(inputPassHash!==storedPassHash){
+            S.err='Wrong password for '+user+'.';render();return;
+          }
+        }
+      }
       var h=await sha(code);
       var snap=await db.ref("budgets/"+h).once("value");
       if(!snap.exists()){
-        // Check if username exists but data is missing (orphaned username)
-        if(db){
-          var usnap=await db.ref('usernames/'+user).once('value');
-          if(usnap.exists()){
-            // Username reserved but no account data - allow overwrite
-            S.err='Account data missing. Creating fresh account.';render();
-            localStorage.setItem('bt-user',user);localStorage.setItem('bt-sync',code);
-            S.pin=code;await connect(code);return;
-          }
-        }
         S.err='No account found for '+user+'. Check spelling.';render();return;
       }
     } else {
@@ -3964,7 +3966,7 @@ async function startOnboardFinish(){
   let code;
   if(S.obUser&&S.obPass){code=await deriveCode(S.obUser,S.obPass);localStorage.setItem('bt-user',S.obUser)}else{code=generateSyncCode()}
   localStorage.setItem('bt-sync',code);S.pin=code;
-  if(db&&S.obUser)await db.ref('usernames/'+S.obUser.toLowerCase()).set(code);
+  if(db&&S.obUser)await db.ref('usernames/'+S.obUser.toLowerCase()).set({code:code,passHash:await sha(S.obPass)});
   S.data=JSON.parse(JSON.stringify(DEF));S.data.userName=S.obName||"";
   const amts=S.obIncomeAmts||{};const it=S.obIncomeType;
   if(it==="salary")S.data.template.income.push({id:uid(),label:"Salary",amount:amts.salary||0,recurring:true,note:""});
