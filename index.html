@@ -3467,9 +3467,14 @@ async function doLogin(){
 }
 
 async function autoStart(){
-  let code=localStorage.getItem("bt-sync");
-  if(code){S.pin=code;await connect(code)}
-  else{S.phase="welcome";render()}
+  try{
+    var code=localStorage.getItem("bt-sync");
+    if(code){S.pin=code;await connect(code)}
+    else{S.phase="welcome";render()}
+  }catch(e){
+    console.error("autoStart error:",e);
+    document.getElementById('app').innerHTML='<div style="padding:40px;color:#ede0cc;font-family:sans-serif"><h2>Something went wrong</h2><p style="color:#c4ac8a">'+e.message+'</p><pre style="font-size:11px;color:#96836a;white-space:pre-wrap;margin-top:8px">'+e.stack+'</pre><button onclick="localStorage.clear();location.reload()" style="padding:12px 24px;background:#dbb56e;border:none;border-radius:10px;font-size:14px;margin-top:12px;cursor:pointer">Reset &amp; Reload</button></div>';
+  }
 }
 
 function renderWelcome(){
@@ -3988,15 +3993,9 @@ function calcGroupBalances(gd){
 }
 
 // ===== INIT =====
-window.onerror=function(msg,src,line){console.error(msg);S.view="budget";S.budgetView="dash";S.modal=null;try{render()}catch(e){}};// Register service worker for offline support
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('data:text/javascript;charset=utf-8,'+encodeURIComponent(
-    "self.addEventListener('install',e=>{self.skipWaiting()});"+
-    "self.addEventListener('activate',e=>{e.waitUntil(clients.claim())});"+
-    "self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))})"
-  )).catch(()=>{});
+window.onerror=function(msg,src,line){console.error(msg);S.view="budget";S.budgetView="dash";S.modal=null;try{render()}catch(e){}};try{initFB();autoStart()}catch(e){
+  document.getElementById('app').innerHTML='<div style="padding:40px;color:#ede0cc;font-family:sans-serif"><h2>Something went wrong</h2><p style="color:#c4ac8a">'+e.message+'</p><button onclick="localStorage.clear();location.reload()" style="padding:12px 24px;background:#dbb56e;border:none;border-radius:10px;font-size:14px;margin-top:12px;cursor:pointer">Reset &amp; Reload</button></div>';
 }
-initFB();autoStart();
 </script>
 </body>
 </html>
