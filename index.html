@@ -992,7 +992,7 @@ async function obStep1Next(){
   if(!u||u.length<3){S.err='Username must be at least 3 characters';render();return}
   if(!p2||p2.length<4){S.err='Password must be at least 4 characters';render();return}
   if(p2!==p3){S.err='Passwords do not match';render();return}
-  S.obName=nm.trim()||u;S.obUser=u;S.obPass=p2;S.obPass2=p3;
+  u=u.toLowerCase();S.obName=nm.trim()||u;S.obUser=u;S.obPass=p2;S.obPass2=p3;
   // Check username uniqueness
   var btn=document.getElementById('ob-next');
   if(btn){btn.textContent='Checking...';btn.style.opacity='0.5'}
@@ -3555,15 +3555,27 @@ function tryLogin(){
 }
 
 async function doLogin(){
-  var user=S._loginUser||(document.getElementById("login-user")||{}).value||"";user=user.trim();
-  var pass=S._loginPass||(document.getElementById("login-pass")||{}).value||"";
+  var user=S._loginUser||(document.getElementById("login-user")||{}).value||"";user=user.trim().toLowerCase();
+  var pass=S._loginPass||(document.getElementById("login-pass")||{}).value||"";pass=pass.trim();
   if(!user||!pass){S.err="Enter username and password";render();return}
   try{
     var code=await deriveCode(user,pass);
     if(db){
       var h=await sha(code);
       var snap=await db.ref("budgets/"+h).once("value");
-      if(!snap.exists()){S.err="Account not found. Check your username and password.";render();return}
+      if(!snap.exists()){
+        // Check if username exists but data is missing (orphaned username)
+        if(db){
+          var usnap=await db.ref('usernames/'+user).once('value');
+          if(usnap.exists()){
+            // Username reserved but no account data - allow overwrite
+            S.err='Account data missing. Creating fresh account.';render();
+            localStorage.setItem('bt-user',user);localStorage.setItem('bt-sync',code);
+            S.pin=code;await connect(code);return;
+          }
+        }
+        S.err='No account found for '+user+'. Check spelling.';render();return;
+      }
     } else {
       var h2=await sha(code);
       if(!localStorage.getItem("bt-"+h2)){S.err="No account found on this device.";render();return}
