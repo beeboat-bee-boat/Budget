@@ -2663,15 +2663,14 @@ function _render(){
         <button class="add" onclick="recalcAll()">Recalculate all totals</button>
         <button class="add" onclick="importData()">Import backup</button>
       </div></div>`;
-    const syncCode="";
+
     h+=`<div class="sec"><div class="sh"><span class="sh-t">Sync</span><span class="sh-v">${db?'Cloud ☁️':'Local 📱'}</span></div>
       <div style="padding:8px 0">
         <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Enter this code on another device to connect:</div>
-        <div style="font-size:18px;font-weight:700;letter-spacing:3px;padding:12px;background:var(--c1);border-radius:10px;text-align:center;font-family:monospace;user-select:all;-webkit-user-select:all;box-shadow:var(--sh)">${syncCode}</div>
         <div style="font-size:11px;color:var(--t3);margin-top:6px">Keep this private. Anyone with this code can access your budget.</div>
       </div>
       <div style="margin-bottom:8px">${localStorage.getItem('bt-user')?'<div style="font-size:12px;color:var(--t2);margin-bottom:2px">Logged in as</div><div style="font-size:15px;font-weight:600;margin-bottom:8px">'+esc(localStorage.getItem('bt-user'))+'</div>':''}
-      <div style="font-size:12px;color:var(--t2);margin-bottom:2px">Recovery code — screenshot this</div></div>
+
       <button class="add" onclick="startReOnboard()">Edit setup (income, categories, cards)</button>
       <button class="add" onclick="S.modal={type:'changeuser'};render()">Change username</button>
         <button class="add" onclick="S.modal={type:'changepass'};render()">Change password</button>
@@ -3426,7 +3425,6 @@ function saveNWBalance(ai){
 
 // Export/Import
 function exportData(){
-  const exportData={...S.data,_syncCode:localStorage.getItem("bt-sync")||""};
   const blob=new Blob([JSON.stringify(exportData,null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="budget-backup-"+mk()+".json";a.click();
 }
@@ -3434,7 +3432,6 @@ function importData(){
   const inp=document.createElement("input");inp.type="file";inp.accept=".json";
   inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{
     const parsed=JSON.parse(ev.target.result);
-    if(parsed._syncCode){localStorage.setItem("bt-sync",parsed._syncCode);S.pin=parsed._syncCode;delete parsed._syncCode}
     S.data=parsed;ensureStructure();save();render();toast("Restored!")
   }catch{toast("Invalid file")}};r.readAsText(f)};
   inp.click();
@@ -3747,46 +3744,16 @@ function renderWelcome(){
 
   if(step===0){
     h+=`<div class="ob-top"><div style="font-size:48px;margin-bottom:12px">💰</div><h2>Budget</h2>
-      <p>Track your money, pay off debt, and see where every dollar goes.</p>`;
-    if(S.welcomeMode==="login"){
-      // Returning user login
-      h+=`<div style="width:100%;max-width:300px;margin-top:8px">
-        <input id="login-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(S._loginUser||localStorage.getItem('bt-user')||'')}" oninput="S._loginUser=this.value" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
-        <input id="login-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S._loginPass||''}" oninput="S._loginPass=this.value" onkeydown="if(event.key==='Enter')doLogin()">
-        ${S.err?'<div style="color:var(--rd);font-size:13px;margin:6px 0">'+S.err+'</div>':''}
-        <button id="login-btn" class="ob-btn" style="width:100%;margin-top:4px" onclick="tryLogin()">Log in</button>
-        <button class="ob-skip" onclick="S.welcomeMode=null;S.err='';render()">Back</button>
-      </div>`;
-    } else if(S.welcomeMode==="recovery"){
-      // Recovery with sync code
-      h+=`<div style="width:100%;max-width:300px;margin-top:8px">
-        <input id="sync-input" class="ob-input" style="letter-spacing:3px" maxlength="20" placeholder="Recovery code" onkeydown="if(event.key==='Enter')document.getElementById('link-btn').click()">
-        ${S.err?'<div style="color:var(--rd);font-size:13px;margin:6px 0">'+S.err+'</div>':''}
-        <button id="link-btn" class="ob-btn" style="width:100%;margin-top:4px" onmousedown="event.preventDefault();doRecoverCode()">Recover account</button>
-        <button class="ob-skip" onclick="S.welcomeMode=null;S.err='';render()">Back</button>
-      </div>`;
-    } else {
-      // Main menu
-      h+=`<button class="ob-btn" style="margin-top:12px" onmousedown="event.preventDefault();S.obStep=1;render()">Create account</button>
-        <button class="ob-btn sec" style="margin-top:6px" onclick="S.welcomeMode='login';render()">Log in</button>
-        <button class="ob-skip" onclick="S.welcomeMode='recovery';render()">Recover with backup code</button>`;
-    }
-    h+=`</div>`;
-  } else if(step===1){
-    h+=`<div class="ob-top">${backBtn(0)}<div class="ob-step">Step 1 of 6</div><h2>Create your account</h2>
-      <p>Pick a username and password to log in on any device.</p>
-      <div style="width:100%;max-width:300px">
-        <input id="ob-name" class="ob-input" style="text-align:left" maxlength="50" placeholder="Your name (for group expenses)" value="${esc(S.obName||"")}" oninput="S.obName=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-user').focus()">
-        <input id="ob-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(S.obUser||"")}" oninput="S.obUser=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass').focus()">
-        <input id="ob-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S.obPass||""}" oninput="S.obPass=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass2').focus()">
-        <input id="ob-pass2" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Confirm password" value="${S.obPass2||""}" oninput="S.obPass2=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-next').click()">
-        ${S.err?'<div style="color:var(--rd);font-size:12px;margin:4px 0">'+S.err+'</div>':''}
-      </div>
-      <button id="ob-next" class="ob-btn" onmousedown="event.preventDefault();obStep1Next()">Next</button></div>`;
+      <p>Track your money, pay off debt, and see where every dollar goes.</p>
+      <button id="google-btn" class="ob-btn" style="margin-top:20px;display:flex;align-items:center;justify-content:center;gap:10px" onclick="googleSignIn()">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#34A853" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign in with Google
+      </button>
+    </div>`;
   } else if(step===2){
     if(!S.obIncomeType)S.obIncomeType=null;if(!S.obIncomeAmts)S.obIncomeAmts={};
     const types=[{id:"salary",label:"Salary",desc:"Fixed paycheck",fields:[{k:"salary",l:"Monthly take-home (after tax)",ph:"e.g. 5000"}]},{id:"hourly",label:"Hourly",desc:"Varies by hours",fields:[{k:"hourly",l:"Avg monthly take-home",ph:"e.g. 2400"}]},{id:"base_comm",label:"Base + Commission",desc:"Fixed + variable",fields:[{k:"base",l:"Monthly base take-home",ph:"e.g. 4600"},{k:"comm",l:"Avg monthly commission (after tax)",ph:"e.g. 1800"}]},{id:"comm_only",label:"Commission only",desc:"100% variable",fields:[{k:"comm",l:"Avg monthly commission",ph:"e.g. 3000"}]},{id:"freelance",label:"Freelance / Gig",desc:"Multiple sources",fields:[{k:"freelance",l:"Avg monthly take-home",ph:"e.g. 4000"}]}];
-    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px">${backBtn(1)}<div class="ob-step">Step 2 of 6</div><h2>How do you get paid?</h2><div class="ob-chips" style="flex-direction:column;align-items:stretch;max-width:320px">`;
+    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px">${backBtn(1)}<div class="ob-step">Step 1 of 5</div><h2>How do you get paid?</h2><div class="ob-chips" style="flex-direction:column;align-items:stretch;max-width:320px">`;
     types.forEach(t2=>{h+=`<button class="ob-chip ${S.obIncomeType===t2.id?'on':''}" style="justify-content:space-between;text-align:left" onclick="S.obIncomeType='${t2.id}';render()"><span style="font-weight:600">${t2.label}</span><span style="font-size:11px;color:var(--t2)">${t2.desc}</span></button>`});
     h+=`</div>`;
     const selType=types.find(t2=>t2.id===S.obIncomeType);
@@ -3817,7 +3784,7 @@ function renderWelcome(){
     h+=`<button class="ob-btn" style="margin-top:12px" onclick="if(!S.obIncomeType){toast('Pick how you get paid');return}S.obStep=3;if(!S.obCats)S.obCats=[];render()" ${S.obIncomeType?'':'style="opacity:.5;margin-top:12px"'}>Next</button></div>`;
   } else if(step===3){
     if(!S.obCats)S.obCats=[];
-    h+=`<div class="ob-top">${backBtn(2)}<div class="ob-step">Step 3 of 6</div><h2>Where does it go?</h2><p>Pick your spending categories.</p><div class="ob-chips">`;
+    h+=`<div class="ob-top">${backBtn(2)}<div class="ob-step">Step 2 of 5</div><h2>Where does it go?</h2><p>Pick your spending categories.</p><div class="ob-chips">`;
     ["Rent / Housing","Food & Groceries","Transport","Going Out","Subscriptions","Savings","Pets","Health","Shopping","Utilities"].forEach(s=>{const se=s.replace(/'/g,"\\\'");const added=S.obCats.includes(s);h+=`<button class="ob-chip ${added?'added':''}" onclick="if(S.obCats.includes('${se}')){S.obCats=S.obCats.filter(x=>x!=='${se}')}else{S.obCats.push('${se}')};render()">${added?'\u2713 ':''}${s}</button>`});
     h+=`</div><input class="ob-input" maxlength="50" placeholder="Custom + Enter" onkeydown="if(event.key==='Enter'){const v2=this.value.trim();if(v2&&!S.obCats.includes(v2)){S.obCats.push(v2);this.value='';render()}}">`;
     if(S.obCats.length)h+=`<div style="font-size:13px;color:var(--gn);margin:4px 0">${S.obCats.length} selected</div>`;
@@ -3861,7 +3828,7 @@ function renderWelcome(){
     const commAlloc=S.obIncomeAmts?.comm?(S.obIncomeAmts.comm*(S.obCommPct||50)/100):0;
     const basePay3=(S.obIncomeAmts?.salary||S.obIncomeAmts?.base||S.obIncomeAmts?.hourly||S.obIncomeAmts?.freelance||0)+commAlloc;
     const fixedTotal=S.obFixed.filter(f=>f.on).reduce((s,f)=>s+f.amount,0);
-    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px;align-items:stretch">${backBtn(3)}<div class="ob-step" style="text-align:center">Step 4 of 6</div><h2 style="text-align:center">Fixed monthly costs</h2>
+    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px;align-items:stretch">${backBtn(3)}<div class="ob-step" style="text-align:center">Step 3 of 5</div><h2 style="text-align:center">Fixed monthly costs</h2>
       <p style="text-align:center;font-size:12px;color:var(--t2)">These are bills you pay every month no matter what.</p><div style="max-width:340px;margin:0 auto;width:100%">`;
     S.obFixed.forEach((f,fi)=>{
       h+=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
@@ -3932,7 +3899,7 @@ function renderWelcome(){
       if(!S.obCats.includes(cat))S.obCats.push(cat);
     });
 
-    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px;align-items:stretch">${backBtn(4)}<div class="ob-step" style="text-align:center">Step 5 of 6</div><h2 style="text-align:center">Your budget plan</h2>`;
+    h+=`<div class="ob-top" style="justify-content:flex-start;padding-top:60px;align-items:stretch">${backBtn(4)}<div class="ob-step" style="text-align:center">Step 4 of 5</div><h2 style="text-align:center">Your budget plan</h2>`;
     // Savings goal
     const afterFixed=Math.max(0,basePay4-fixedTotal2);
     h+=`<div style="max-width:340px;margin:0 auto 14px;width:100%;padding:14px;background:var(--c1);border-radius:14px;box-shadow:var(--sh)">
@@ -3998,7 +3965,7 @@ function renderWelcome(){
     h+=`<button class="ob-btn" style="margin-top:12px;align-self:center" onclick="saveBudgetInputs();S.obStep=6;if(!S.obCards)S.obCards=[];render()">Next</button></div>`;
   } else if(step===6){
     if(!S.obCards)S.obCards=[];
-    h+=`<div class="ob-top">${backBtn(5)}<div class="ob-step">Step 6 of 6</div><h2>Got credit cards?</h2><p>Add any cards with a balance.</p>`;
+    h+=`<div class="ob-top">${backBtn(5)}<div class="ob-step">Step 5 of 5</div><h2>Got credit cards?</h2><p>Add any cards with a balance.</p>`;
     S.obCards.forEach((cd,ci)=>{h+=`<div style="width:100%;max-width:300px;background:var(--c1);border-radius:12px;padding:10px 14px;margin:4px 0;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--sh)"><div><div style="font-weight:600">${esc(cd.name)}</div><div style="font-size:11px;color:var(--t2)">${fmt(cd.balance)} · ${cd.apr}% · Limit ${fmt(cd.limit)}</div></div><button class="xb" onclick="S.obCards.splice(${ci},1);render()">\u00d7</button></div>`});
     h+=`<div style="width:100%;max-width:300px;margin-top:8px"><input id="ob-cn" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" placeholder="Card name (e.g. Chase)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input id="ob-cb" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Balance"><input id="ob-cl" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Limit"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="ob-ca" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="APR %"><input id="ob-cm" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Min payment"></div><div style="margin-top:6px"><input id="ob-cs" class="ob-input" style="margin:0" type="number" inputmode="numeric" placeholder="Bill due date (day, e.g. 15)" min="1" max="31"></div><button class="ob-btn sec" style="width:100%;margin-top:6px" onmousedown="event.preventDefault();addObCard()">+ Add this card</button></div>`;
     h+=`<button class="ob-btn" style="margin-top:12px" onmousedown="event.preventDefault();S.obStep=7;render()">Next</button><button class="ob-skip" onmousedown="event.preventDefault();S.obStep=7;render()">Skip — no cards</button></div>`;
