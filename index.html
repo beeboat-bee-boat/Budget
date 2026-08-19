@@ -982,16 +982,32 @@ function saveEditSub(){
 }
 
 
-function obStep1Next(){
+async function obStep1Next(){
   if(document.activeElement)document.activeElement.blur();
-  var u=(document.getElementById('ob-user')||{}).value||'';u=u.trim();
-  var p2=(document.getElementById('ob-pass')||{}).value||'';
-  var p3=(document.getElementById('ob-pass2')||{}).value||'';
+  // Read from S.ob* (saved via oninput) with DOM fallback
+  var u=S.obUser||(document.getElementById('ob-user')||{}).value||'';u=u.trim();
+  var nm=S.obName||(document.getElementById('ob-name')||{}).value||'';
+  var p2=S.obPass||(document.getElementById('ob-pass')||{}).value||'';
+  var p3=S.obPass2||(document.getElementById('ob-pass2')||{}).value||'';
   if(!u||u.length<3){S.err='Username must be at least 3 characters';render();return}
   if(!p2||p2.length<4){S.err='Password must be at least 4 characters';render();return}
   if(p2!==p3){S.err='Passwords do not match';render();return}
-  S.obName=(document.getElementById('ob-name')||{}).value||u;S.obName=S.obName.trim()||u;
-  S.obUser=u;S.obPass=p2;S.obPass2=p3;S.err='';S.obStep=2;render();
+  S.obName=nm.trim()||u;S.obUser=u;S.obPass=p2;S.obPass2=p3;
+  // Check username uniqueness
+  var btn=document.getElementById('ob-next');
+  if(btn){btn.textContent='Checking...';btn.style.opacity='0.5'}
+  try{
+    if(db){
+      var snap=await db.ref('usernames/'+u.toLowerCase()).once('value');
+      if(snap.exists()){
+        S.err='Username "'+u+'" is already taken';render();return;
+      }
+    }
+    S.err='';S.obStep=2;render();
+  }catch(e){
+    console.error('Username check error:',e);
+    S.err='';S.obStep=2;render();
+  }
 }
 
 function removeGroupMember(name){
@@ -3539,8 +3555,8 @@ function tryLogin(){
 }
 
 async function doLogin(){
-  var user=(document.getElementById("login-user")||{}).value||"";user=user.trim();
-  var pass=(document.getElementById("login-pass")||{}).value||"";
+  var user=S._loginUser||(document.getElementById("login-user")||{}).value||"";user=user.trim();
+  var pass=S._loginPass||(document.getElementById("login-pass")||{}).value||"";
   if(!user||!pass){S.err="Enter username and password";render();return}
   try{
     var code=await deriveCode(user,pass);
@@ -3583,8 +3599,8 @@ function renderWelcome(){
     if(S.welcomeMode==="login"){
       // Returning user login
       h+=`<div style="width:100%;max-width:300px;margin-top:8px">
-        <input id="login-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(localStorage.getItem('bt-user')||'')}" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
-        <input id="login-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+        <input id="login-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(S._loginUser||localStorage.getItem('bt-user')||'')}" oninput="S._loginUser=this.value" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+        <input id="login-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S._loginPass||''}" oninput="S._loginPass=this.value" onkeydown="if(event.key==='Enter')doLogin()">
         ${S.err?'<div style="color:var(--rd);font-size:13px;margin:6px 0">'+S.err+'</div>':''}
         <button id="login-btn" class="ob-btn" style="width:100%;margin-top:4px" onclick="tryLogin()">Log in</button>
         <button class="ob-skip" onclick="S.welcomeMode=null;S.err='';render()">Back</button>
@@ -3608,10 +3624,10 @@ function renderWelcome(){
     h+=`<div class="ob-top">${backBtn(0)}<div class="ob-step">Step 1 of 6</div><h2>Create your account</h2>
       <p>Pick a username and password to log in on any device.</p>
       <div style="width:100%;max-width:300px">
-        <input id="ob-name" class="ob-input" style="text-align:left" maxlength="50" placeholder="Your name (for group expenses)" value="${esc(S.obName||"")}" onkeydown="if(event.key==='Enter')document.getElementById('ob-user').focus()">
-        <input id="ob-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(S.obUser||"")}" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass').focus()">
-        <input id="ob-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S.obPass||""}" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass2').focus()">
-        <input id="ob-pass2" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Confirm password" value="${S.obPass2||""}" onkeydown="if(event.key==='Enter')document.getElementById('ob-next').click()">
+        <input id="ob-name" class="ob-input" style="text-align:left" maxlength="50" placeholder="Your name (for group expenses)" value="${esc(S.obName||"")}" oninput="S.obName=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-user').focus()">
+        <input id="ob-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(S.obUser||"")}" oninput="S.obUser=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass').focus()">
+        <input id="ob-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" value="${S.obPass||""}" oninput="S.obPass=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-pass2').focus()">
+        <input id="ob-pass2" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Confirm password" value="${S.obPass2||""}" oninput="S.obPass2=this.value" onkeydown="if(event.key==='Enter')document.getElementById('ob-next').click()">
         ${S.err?'<div style="color:var(--rd);font-size:12px;margin:4px 0">'+S.err+'</div>':''}
       </div>
       <button id="ob-next" class="ob-btn" onmousedown="event.preventDefault();obStep1Next()">Next</button></div>`;
@@ -3863,7 +3879,7 @@ async function startOnboardFinish(){
   let code;
   if(S.obUser&&S.obPass){code=await deriveCode(S.obUser,S.obPass);localStorage.setItem('bt-user',S.obUser)}else{code=generateSyncCode()}
   localStorage.setItem('bt-sync',code);S.pin=code;
-  if(db&&S.obUser)db.ref('usernames/'+S.obUser.toLowerCase()).set(code);
+  if(db&&S.obUser)await db.ref('usernames/'+S.obUser.toLowerCase()).set(code);
   S.data=JSON.parse(JSON.stringify(DEF));S.data.userName=S.obName||"";
   const amts=S.obIncomeAmts||{};const it=S.obIncomeType;
   if(it==="salary")S.data.template.income.push({id:uid(),label:"Salary",amount:amts.salary||0,recurring:true,note:""});
