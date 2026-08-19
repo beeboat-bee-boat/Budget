@@ -546,21 +546,36 @@ function signOut(){
 }
 
 function startOver(){
-  // Nuclear wipe - delete everything
-  try{if(db&&S.firebaseUser)db.ref("budgets/"+S.firebaseUser.uid).remove().catch(function(){})}catch(e){}
-  try{if(auth)auth.signOut().catch(function(){})}catch(e){}
-  localStorage.clear();
-  sessionStorage.clear();
-  // Clear IndexedDB (Firebase auth stores sessions here)
-  try{
-    indexedDB.databases().then(function(dbs){
-      dbs.forEach(function(d2){indexedDB.deleteDatabase(d2.name)});
+  // Stop all saves and listeners immediately
+  clearTimeout(_saveTimer);
+  if(dbRef){try{dbRef.off()}catch(e){}}
+  dbRef=null;
+  S.data=null;
+  S.phase="pin";
+
+  // Delete Firebase data
+  var uid2=S.firebaseUser?S.firebaseUser.uid:null;
+  var deletePromise=Promise.resolve();
+  if(db&&uid2){
+    deletePromise=db.ref("budgets/"+uid2).remove().then(function(){
+      // Also clear the local backup
+      return db.ref("budgets/"+uid2).once("value");
+    }).then(function(snap){
+      if(snap.exists())return db.ref("budgets/"+uid2).set(null);
     }).catch(function(){});
-  }catch(e){}
-  // Clear caches
-  try{caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})}).catch(function(){})}catch(e){}
-  // Wait for everything to settle then reload
-  setTimeout(function(){window.location.replace(window.location.origin+window.location.pathname)},800);
+  }
+
+  deletePromise.then(function(){
+    localStorage.clear();
+    sessionStorage.clear();
+    if(auth)return auth.signOut();
+  }).then(function(){
+    window.location.reload();
+  }).catch(function(){
+    localStorage.clear();
+    if(auth)auth.signOut().catch(function(){});
+    window.location.reload();
+  });
 }
 
 function forceSync(){
@@ -4142,6 +4157,7 @@ function renderWelcome(){
 const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true},{l:"Insurance",r:true}],"Food & Groceries":[{l:"Groceries",r:false},{l:"Eating out",r:false},{l:"Coffee",r:false},{l:"Delivery",r:false}],"Cats":[{l:"Cat food",r:false},{l:"Litter",r:false},{l:"Vet",r:false}],"Pets":[{l:"Pet food",r:false},{l:"Vet",r:false},{l:"Supplies",r:false}],"Transport":[{l:"Metro / Bus",r:true},{l:"Uber / Lyft",r:false},{l:"Gas",r:false}],"Going Out":[{l:"Bars / Drinks",r:false},{l:"Events",r:false}],"Savings":[{l:"Emergency fund",r:true},{l:"Investments",r:true}],"Subscriptions":[{l:"Streaming",r:true},{l:"Software",r:true},{l:"Phone plan",r:true}],"Shopping":[{l:"Clothes",r:false},{l:"Amazon",r:false}],"Health":[{l:"Gym",r:true},{l:"Pharmacy",r:false}],"Utilities":[{l:"Electric",r:true},{l:"Internet",r:true},{l:"Phone",r:true}]};
   const backBtn=(to)=>{
     if(S._reOnboard&&to<2)return `<button class="ob-skip" onclick="S._reOnboard=false;S.phase='app';S.month=mk();render()" style="align-self:flex-start;padding:8px 0;font-size:15px;margin-bottom:8px">‹ Cancel</button>`;
+    if(to<2)return `<button class="ob-skip" onclick="if(auth)auth.signOut().catch(function(){});S.phase='welcome';S.obStep=0;render()" style="align-self:flex-start;padding:8px 0;font-size:15px;margin-bottom:8px">‹ Back</button>`;
     return `<button class="ob-skip" onclick="S.obStep=${to};render()" style="align-self:flex-start;padding:8px 0;font-size:15px;margin-bottom:8px">‹ Back</button>`;
   };
 
