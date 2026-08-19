@@ -980,6 +980,19 @@ function saveEditSub(){
   save();closeModal();toast("Updated "+sub.name);
 }
 
+function addObCard(){
+  var n=(document.getElementById('ob-cn')||{}).value||'';n=n.trim();
+  var b=parseFloat((document.getElementById('ob-cb')||{}).value)||0;
+  var l=parseFloat((document.getElementById('ob-cl')||{}).value)||0;
+  var a=parseFloat((document.getElementById('ob-ca')||{}).value)||0;
+  var mp=parseFloat((document.getElementById('ob-cm')||{}).value)||0;
+  var sd=parseInt((document.getElementById('ob-cs')||{}).value)||0;
+  if(!n){toast('Enter card name');return}
+  if(!S.obCards)S.obCards=[];
+  S.obCards.push({name:n,balance:b,limit:l,apr:a,minPayment:mp,stmtDate:sd});
+  render();
+}
+
 function addSubscription(){
   const name=document.getElementById("sub-name").value.trim();
   const amount=parseFloat(document.getElementById("sub-amt").value)||0;
@@ -3658,7 +3671,7 @@ function renderWelcome(){
     if(!S.obCards)S.obCards=[];
     h+=`<div class="ob-top">${backBtn(5)}<div class="ob-step">Step 6 of 6</div><h2>Got credit cards?</h2><p>Add any cards with a balance.</p>`;
     S.obCards.forEach((cd,ci)=>{h+=`<div style="width:100%;max-width:300px;background:var(--c1);border-radius:12px;padding:10px 14px;margin:4px 0;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--sh)"><div><div style="font-weight:600">${esc(cd.name)}</div><div style="font-size:11px;color:var(--t2)">${fmt(cd.balance)} · ${cd.apr}% · Limit ${fmt(cd.limit)}</div></div><button class="xb" onclick="S.obCards.splice(${ci},1);render()">\u00d7</button></div>`});
-    h+=`<div style="width:100%;max-width:300px;margin-top:8px"><input id="ob-cn" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" placeholder="Card name (e.g. Chase)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input id="ob-cb" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Balance"><input id="ob-cl" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Limit"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="ob-ca" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="APR %"><input id="ob-cm" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Min payment"></div><div style="margin-top:6px"><input id="ob-cs" class="ob-input" style="margin:0" type="number" inputmode="numeric" placeholder="Bill due date (day, e.g. 15)" min="1" max="31"></div><button class="ob-btn sec" style="width:100%;margin-top:6px" onclick="const n=document.getElementById('ob-cn').value.trim();const b=parseFloat(document.getElementById('ob-cb').value)||0;const l=parseFloat(document.getElementById('ob-cl').value)||0;const a=parseFloat(document.getElementById('ob-ca').value)||0;const mp=parseFloat(document.getElementById('ob-cm').value)||0;if(!n){toast('Enter card name');return}const sd=parseInt(document.getElementById('ob-cs').value)||0;S.obCards.push({name:n,balance:b,limit:l,apr:a,minPayment:mp,stmtDate:sd});render()">+ Add this card</button></div>`;
+    h+=`<div style="width:100%;max-width:300px;margin-top:8px"><input id="ob-cn" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" placeholder="Card name (e.g. Chase)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input id="ob-cb" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Balance"><input id="ob-cl" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Limit"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="ob-ca" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="APR %"><input id="ob-cm" class="ob-input" style="margin:0" type="number" inputmode="decimal" placeholder="Min payment"></div><div style="margin-top:6px"><input id="ob-cs" class="ob-input" style="margin:0" type="number" inputmode="numeric" placeholder="Bill due date (day, e.g. 15)" min="1" max="31"></div><button class="ob-btn sec" style="width:100%;margin-top:6px" onclick="addObCard()">+ Add this card</button></div>`;
     h+=`<button class="ob-btn" style="margin-top:12px" onclick="S.obStep=7;render()">Next</button><button class="ob-skip" onclick="S.obStep=7;render()">Skip — no cards</button></div>`;
   } else if(step===7){
   } else if(step===8){
