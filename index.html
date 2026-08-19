@@ -494,7 +494,25 @@ async function connectWithUid(uid,displayName){  try{
     dbRef=db.ref("budgets/"+uid);
     var snap=await dbRef.once("value");
     if(snap.exists()){
-      S.data=snap.val();
+      var remoteData=snap.val();
+      var localKey="bt-local-data";
+      var localRaw=localStorage.getItem(localKey);
+      if(localRaw){
+        try{
+          var localData=JSON.parse(localRaw);
+          var remoteTime=remoteData._lastModified||0;
+          var localTime=localData._lastModified||0;
+          if(localTime>remoteTime){
+            // Local is newer - push to Firebase
+            S.data=localData;
+            dbRef.set(localData);
+          } else {
+            S.data=remoteData;
+          }
+        }catch(e){S.data=remoteData}
+      } else {
+        S.data=remoteData;
+      }
       // Check if this is effectively empty/default data (never onboarded)
       var tmpl=S.data.template||{};
       var hasSetup=(tmpl.income&&tmpl.income.length>0)||(tmpl.categories&&tmpl.categories.length>2);
@@ -607,8 +625,9 @@ function forceSync(){
 }
 
 function _doSave(){
+  if(S.data)S.data._lastModified=Date.now();
   if(dbRef){dbRef.set(S.data).catch(function(e){console.error("Firebase save error:",e)})}
-  if(S._localMode)localStorage.setItem("bt-local-data",JSON.stringify(S.data));
+  localStorage.setItem("bt-local-data",JSON.stringify(S.data));
   const code=S.pin;
   sha(code).then(h=>localStorage.setItem("bt-"+h,JSON.stringify(S.data)));
 }
