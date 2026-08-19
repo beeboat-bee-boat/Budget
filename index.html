@@ -983,6 +983,7 @@ function saveEditSub(){
 
 
 function obStep1Next(){
+  if(document.activeElement)document.activeElement.blur();
   var u=(document.getElementById('ob-user')||{}).value||'';u=u.trim();
   var p2=(document.getElementById('ob-pass')||{}).value||'';
   var p3=(document.getElementById('ob-pass2')||{}).value||'';
@@ -3526,11 +3527,15 @@ async function doChangePass(){
 }
 
 function tryLogin(){
+  // Force blur to commit any pending input
+  if(document.activeElement)document.activeElement.blur();
   var btn=document.getElementById("login-btn");
   if(btn)btn.textContent="Logging in...";
-  doLogin().catch(function(e){
-    S.err="Error: "+e.message;render();
-  });
+  setTimeout(function(){
+    doLogin().catch(function(e){
+      S.err="Error: "+e.message;render();
+    });
+  },50);
 }
 
 async function doLogin(){
