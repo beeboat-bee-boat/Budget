@@ -980,6 +980,65 @@ function saveEditSub(){
   save();closeModal();toast("Updated "+sub.name);
 }
 
+
+function obStep1Next(){
+  var u=(document.getElementById('ob-user')||{}).value||'';u=u.trim();
+  var p2=(document.getElementById('ob-pass')||{}).value||'';
+  var p3=(document.getElementById('ob-pass2')||{}).value||'';
+  if(!u||u.length<3){S.err='Username must be at least 3 characters';render();return}
+  if(!p2||p2.length<4){S.err='Password must be at least 4 characters';render();return}
+  if(p2!==p3){S.err='Passwords do not match';render();return}
+  S.obName=(document.getElementById('ob-name')||{}).value||u;S.obName=S.obName.trim()||u;
+  S.obUser=u;S.obPass=p2;S.obPass2=p3;S.err='';S.obStep=2;render();
+}
+
+function removeGroupMember(name){
+  customConfirm('Remove '+name+' from group?',function(){delete S.data.groups[S.activeGroup].members[name];save();render()});
+}
+
+function openGroupExpenseModal(){
+  var gd=S.data.groups[S.activeGroup]||{};
+  S.modal={type:'groupexpense',splitWith:Object.keys(gd.members||{})};render();
+}
+
+function saveGroupRename(){
+  var v=(document.getElementById('m-grpname')||{}).value||'';v=v.trim();
+  if(v){S.data.groups[S.activeGroup].name=v;save();closeModal()}
+}
+
+function doJoinGroup(){
+  var c2=(document.getElementById('m-inp')||{}).value||'';c2=c2.trim().toUpperCase();
+  if(c2.length<4){toast('Code too short');return}
+  joinGroup(c2);closeModal();
+}
+
+function doRecoverCode(){
+  var c2=(document.getElementById('sync-input')||{}).value||'';c2=c2.trim().toUpperCase();
+  if(c2.length<8){S.err='Code too short';render();return}
+  localStorage.setItem('bt-sync',c2);S.pin=c2;connect(c2);
+}
+
+function addCustomFixed(){
+  saveFixedInputs();
+  var v=(document.getElementById('ob-custom-fixed')||{}).value||'';v=v.trim();
+  if(v){S.obFixed.push({label:v,amount:0,on:true,cat:'Misc'});render()}
+}
+
+function addMiscIncome(){
+  var newId=uid();
+  S.data.template.income.push({id:newId,label:'Misc',amount:0,recurring:false});
+  var md=getMonth(S.month);
+  md.income.push({id:newId,label:'Misc',budgeted:0,recurring:false,note:'',transactions:[]});
+  save();render();
+}
+
+function switchTab(v){
+  if(S.view===v)return;
+  S._navHistory.push({view:S.view,budgetView:S.budgetView,activeGroup:S.activeGroup});
+  if(S._navHistory.length>10)S._navHistory.shift();
+  S.view=v;if(v!=='budget')S.budgetView='dash';S.edit=false;render();
+}
+
 function addObCard(){
   var n=(document.getElementById('ob-cn')||{}).value||'';n=n.trim();
   var b=parseFloat((document.getElementById('ob-cb')||{}).value)||0;
@@ -1235,6 +1294,10 @@ function toggleSplitMember(idx){
   if(S.modal.splitWith.includes(mem))S.modal.splitWith=S.modal.splitWith.filter(x=>x!==mem);
   else S.modal.splitWith.push(mem);
   render();
+}
+
+function removeGroupMember(name){
+  customConfirm('Remove '+name+' from group?',function(){delete S.data.groups[S.activeGroup].members[name];save();render()});
 }
 
 function openGroupExpenseModal(){
@@ -2017,7 +2080,7 @@ function _render(){
       h+=`<div style="display:flex;flex-wrap:wrap;gap:4px">`;
       h+=`<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--bg);border-radius:8px;font-size:12px">${esc(myName3)} <span style="color:var(--t3);font-size:10px">(you)</span></span>`;
       members.forEach(m2=>{
-        h+=`<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--bg);border-radius:8px;font-size:12px">${esc(m2)} <button style="background:none;border:none;color:var(--t3);font-size:16px;padding:4px 6px;cursor:pointer;min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center" onclick="event.stopPropagation();customConfirm('Remove '+decodeURIComponent('${encodeURIComponent(m2)}')+' from group?',()=>{delete S.data.groups[S.activeGroup].members['${esc(m2)}'];save();render()})">×</button></span>`;
+        h+=`<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--bg);border-radius:8px;font-size:12px">${esc(m2)} <button style="background:none;border:none;color:var(--t3);font-size:16px;padding:4px 6px;cursor:pointer;min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center" onclick="event.stopPropagation();removeGroupMember('${esc(m2)}')">×</button></span>`;
       });
       h+=`</div>`;
       if(S._addingMember){
@@ -2045,7 +2108,7 @@ function _render(){
         h+=`<div style="padding:12px;text-align:center;font-size:12px;color:var(--gn)">✓ All settled up</div>`;
       }
       // Buttons
-      h+=`<div style="display:flex;gap:6px;margin:8px 0"><button class="add" style="flex:1" onclick="const _gd=S.data.groups[S.activeGroup]||{};S.modal={type:'groupexpense',splitWith:[...Object.keys(_gd.members||{})]};render()">+ Add expense</button><button class="add" style="flex:1" onclick="S._addingMember=true;render()">+ Add member</button></div>`;
+      h+=`<div style="display:flex;gap:6px;margin:8px 0"><button class="add" style="flex:1" onclick="openGroupExpenseModal()">+ Add expense</button><button class="add" style="flex:1" onclick="S._addingMember=true;render()">+ Add member</button></div>`;
       // Recent expenses
       const gExpenses=(gd.expenses||[]).slice().reverse().slice(0,15);
       if(gExpenses.length>0){
@@ -2418,7 +2481,7 @@ function _render(){
   // Tab bar
   h+=`<div class="tab-bar">`;
   [{v:"budget",l:"Budget",d:"M3 3h18v18H3zM3 9h18M9 3v18"},{v:"cards",l:"Cards",d:"M2 7h20v12H2zM2 7V5h20v2M6 11h4"},{v:"group",l:"Group",d:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"},{v:"goals",l:"Goals",d:"M12 3a9 9 0 110 18 9 9 0 010-18zM12 7a5 5 0 110 10 5 5 0 010-10z"},{v:"trends",l:"Trends",d:"M3 20V4M7 20V10M11 20V7M15 20V12M19 20V5"},{v:"settings",l:"More",d:"M12 3v2M12 19v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M3 12h2M19 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 8a4 4 0 100 8 4 4 0 000-8z"}].forEach(t=>{
-    h+=`<button class="tab ${S.view===t.v?'active':''}" onclick="if(S.view==='${t.v}')return;S._navHistory.push({view:S.view,budgetView:S.budgetView,activeGroup:S.activeGroup});if(S._navHistory.length>10)S._navHistory.shift();S.view='${t.v}';if('${t.v}'!=='budget')S.budgetView='dash';S.edit=false;render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${t.d}"/></svg>${t.l}</button>`;
+    h+=`<button class="tab ${S.view===t.v?'active':''}" onclick="switchTab('${t.v}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${t.d}"/></svg>${t.l}</button>`;
   });
   h+=`</div>`;
 
@@ -2663,7 +2726,7 @@ function renderModal(){
       });
       // Misc income if no "Misc" or "Other" source exists
       if(!md2.income.some(i=>i.label.toLowerCase()==="misc"||i.label.toLowerCase()==="other")){
-        h+=`<button class="qa-cat" style="border-style:dashed;color:var(--ac)" onclick="S.data.template.income.push({id:uid(),label:'Misc',amount:0,recurring:false});getMonth(S.month).income.push({id:S.data.template.income[S.data.template.income.length-1].id,label:'Misc',budgeted:0,recurring:false,note:'',transactions:[]});save();render()">+ Misc</button>`;
+        h+=`<button class="qa-cat" style="border-style:dashed;color:var(--ac)" onclick="addMiscIncome()">+ Misc</button>`;
       }
       h+=`</div>`;
       // Deposit to account
@@ -2760,7 +2823,7 @@ function renderModal(){
     const grp2=S.data.groups[S.activeGroup];
     h+=`<h3>Rename group</h3>
       <label>Group name</label><input id="m-grpname" class="ob-input" style="text-align:left;margin:4px 0" maxlength="30" value="${esc(grp2?.name||'')}" placeholder="e.g. Apartment, Trip" onkeydown="if(event.key==='Enter')document.getElementById('grp-rename-btn').click()">
-      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button id="grp-rename-btn" class="sv" onclick="const v=document.getElementById('m-grpname').value.trim();if(v){S.data.groups[S.activeGroup].name=v;save();closeModal()}">Save</button></div>`;
+      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button id="grp-rename-btn" class="sv" onclick="saveGroupRename()">Save</button></div>`;
   }
   else if(m.type==="addmember"){
     h+=`<h3>Add member</h3>
@@ -2867,7 +2930,7 @@ function renderModal(){
   else if(m.type==="joingroup"){
     h+=`<h3>Join a group</h3>
       <label>Enter the group code</label><input id="m-inp" style="text-align:center;letter-spacing:3px;font-size:18px" placeholder="Group code" maxlength="12" onkeydown="if(event.key==='Enter')document.getElementById('m-join-btn').click()">
-      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button id="m-join-btn" class="sv" onclick="const c2=document.getElementById('m-inp').value.trim().toUpperCase();if(c2.length<4){toast('Code too short');return}joinGroup(c2);closeModal()">Join</button></div>`;
+      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button id="m-join-btn" class="sv" onclick="doJoinGroup()">Join</button></div>`;
   }
   else if(m.type==="groupexpense"){
     const agrp=S.data.groups[S.activeGroup];
@@ -3433,7 +3496,7 @@ function renderWelcome(){
       h+=`<div style="width:100%;max-width:300px;margin-top:8px">
         <input id="sync-input" class="ob-input" style="letter-spacing:3px" maxlength="20" placeholder="Recovery code" onkeydown="if(event.key==='Enter')document.getElementById('link-btn').click()">
         ${S.err?'<div style="color:var(--rd);font-size:13px;margin:6px 0">'+S.err+'</div>':''}
-        <button id="link-btn" class="ob-btn" style="width:100%;margin-top:4px" onclick="const c2=document.getElementById('sync-input').value.trim().toUpperCase();if(c2.length<8){S.err='Code too short';render();return}localStorage.setItem('bt-sync',c2);S.pin=c2;connect(c2)">Recover account</button>
+        <button id="link-btn" class="ob-btn" style="width:100%;margin-top:4px" onclick="doRecoverCode()">Recover account</button>
         <button class="ob-skip" onclick="S.welcomeMode=null;S.err='';render()">Back</button>
       </div>`;
     } else {
@@ -3453,7 +3516,7 @@ function renderWelcome(){
         <input id="ob-pass2" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Confirm password" value="${S.obPass2||""}" onkeydown="if(event.key==='Enter')document.getElementById('ob-next').click()">
         ${S.err?'<div style="color:var(--rd);font-size:12px;margin:4px 0">'+S.err+'</div>':''}
       </div>
-      <button id="ob-next" class="ob-btn" onclick="const u=document.getElementById('ob-user').value.trim();const p2=document.getElementById('ob-pass').value;const p3=document.getElementById('ob-pass2').value;if(!u||u.length<3){S.err='Username must be at least 3 characters';render();return}if(!p2||p2.length<4){S.err='Password must be at least 4 characters';render();return}if(p2!==p3){S.err='Passwords do not match';render();return}S.obName=document.getElementById('ob-name').value.trim()||u;S.obUser=u;S.obPass=p2;S.obPass2=p3;S.err='';S.obStep=2;render()">Next</button></div>`;
+      <button id="ob-next" class="ob-btn" onclick="obStep1Next()">Next</button></div>`;
   } else if(step===2){
     if(!S.obIncomeType)S.obIncomeType=null;if(!S.obIncomeAmts)S.obIncomeAmts={};
     const types=[{id:"salary",label:"Salary",desc:"Fixed paycheck",fields:[{k:"salary",l:"Monthly take-home (after tax)",ph:"e.g. 5000"}]},{id:"hourly",label:"Hourly",desc:"Varies by hours",fields:[{k:"hourly",l:"Avg monthly take-home",ph:"e.g. 2400"}]},{id:"base_comm",label:"Base + Commission",desc:"Fixed + variable",fields:[{k:"base",l:"Monthly base take-home",ph:"e.g. 4600"},{k:"comm",l:"Avg monthly commission (after tax)",ph:"e.g. 1800"}]},{id:"comm_only",label:"Commission only",desc:"100% variable",fields:[{k:"comm",l:"Avg monthly commission",ph:"e.g. 3000"}]},{id:"freelance",label:"Freelance / Gig",desc:"Multiple sources",fields:[{k:"freelance",l:"Avg monthly take-home",ph:"e.g. 4000"}]}];
@@ -3542,7 +3605,7 @@ function renderWelcome(){
       </div>`;
     });
     // Custom add
-    h+=`<div style="display:flex;gap:6px;margin-top:8px"><input id="ob-custom-fixed" class="ob-input" style="flex:1;margin:0;text-align:left;font-size:13px;padding:10px" maxlength="50" placeholder="Other fixed expense"><button class="ob-btn sec" style="min-width:auto;padding:10px 14px;font-size:12px;margin:0" onclick="saveFixedInputs();const v=document.getElementById('ob-custom-fixed').value.trim();if(v){S.obFixed.push({label:v,amount:0,on:true,cat:'Misc'});render()}">Add</button></div>`;
+    h+=`<div style="display:flex;gap:6px;margin-top:8px"><input id="ob-custom-fixed" class="ob-input" style="flex:1;margin:0;text-align:left;font-size:13px;padding:10px" maxlength="50" placeholder="Other fixed expense"><button class="ob-btn sec" style="min-width:auto;padding:10px 14px;font-size:12px;margin:0" onclick="addCustomFixed()">Add</button></div>`;
     // Summary
     if(basePay3>0){
       const leftAfterFixed=basePay3-fixedTotal;
