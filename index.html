@@ -558,6 +558,24 @@ function save(){
   _saveTimer=setTimeout(_doSave,500);
 }
 function saveNow(){clearTimeout(_saveTimer);_doSave()}
+function confirmStartOver(){
+  var btn=document.getElementById('startover-btn');
+  if(!btn)return;
+  if(btn.dataset.confirmed==='yes'){
+    startOver();return;
+  }
+  btn.textContent='Tap again to confirm';
+  btn.style.background='var(--rd)';
+  btn.style.color='white';
+  btn.dataset.confirmed='yes';
+  setTimeout(function(){
+    btn.textContent='Start over';
+    btn.style.background='';
+    btn.style.color='var(--rd)';
+    btn.dataset.confirmed='';
+  },3000);
+}
+
 function startOver(){
   var code=localStorage.getItem("bt-sync")||S.pin;
   if(db&&code){
@@ -2607,7 +2625,7 @@ function _render(){
       <button class="add" onclick="S.modal={type:'changeuser'};render()">Change username</button>
         <button class="add" onclick="S.modal={type:'changepass'};render()">Change password</button>
       <button class="add" style="color:var(--rd);border-color:var(--rd)" onclick="customConfirm('Log out? You will need your sync code to reconnect.',()=>{localStorage.removeItem('bt-sync');location.reload()})">Log out</button>
-      <button class="add" style="color:var(--rd);border-color:var(--rd);margin-top:4px" onclick="customConfirm('Start over? This will erase ALL your data from this device and the cloud. This cannot be undone.',function(){startOver()})">Start over</button>
+      <button id="startover-btn" class="add" style="color:var(--rd);border-color:var(--rd);margin-top:4px" onclick="confirmStartOver()">Start over</button>
     </div></div>`;
   }
 
