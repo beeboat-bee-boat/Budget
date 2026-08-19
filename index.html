@@ -3369,7 +3369,7 @@ function renderModal(){
         var selCard=pcards.find(function(x){return x.id===selItem});
         var previewAmt=parseFloat(m._amt)||0;
         if(selCard){
-          h+=`<div style="font-size:12px;color:var(--t2);margin-top:8px;padding:10px;background:var(--bg);border-radius:8px">`;
+          h+=`<div id="bal-preview" style="font-size:12px;color:var(--t2);margin-top:8px;padding:10px;background:var(--bg);border-radius:8px">`;
           h+=`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Card balance after:</span><b style="color:var(--gn)">${fmt(Math.max(0,selCard.balance-previewAmt))}</b></div>`;
           if(curPayFrom&&curPayFrom!=='none'&&curPayFrom!=='other'){
             var payFromAcct=(S.data.networth?.accounts||[]).find(function(a){return a.id===curPayFrom});
