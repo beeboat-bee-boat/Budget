@@ -355,14 +355,27 @@ function initFB(){if(!hasFC())return false;try{firebase.initializeApp(FIREBASE_C
 
 async function connect(pin){
   var h=await sha(pin);
+  console.log("Connecting with hash:",h.substring(0,8)+"..., db:",!!db);
   if(db){
-    dbRef=db.ref("budgets/"+h);
-    const snap=await dbRef.once("value");
-    S.data=snap.exists()?snap.val():JSON.parse(JSON.stringify(DEF));
-    if(!snap.exists())await dbRef.set(S.data);
-    dbRef.on("value",s=>{if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){console.error("Sync render error:",e)}}});
+    try{
+      dbRef=db.ref("budgets/"+h);
+      var snap=await dbRef.once("value");
+      console.log("Firebase data exists:",snap.exists());
+      S.data=snap.exists()?snap.val():JSON.parse(JSON.stringify(DEF));
+      if(!snap.exists()){
+        await dbRef.set(S.data);
+        console.log("Created new budget in Firebase");
+      }
+      dbRef.on("value",function(s){if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){console.error("Sync render error:",e)}}});
+    }catch(e){
+      console.error("Firebase connect error:",e);
+      // Fallback to localStorage
+      var l=localStorage.getItem("bt-"+h);
+      S.data=l?JSON.parse(l):JSON.parse(JSON.stringify(DEF));
+    }
   } else {
-    const l=localStorage.getItem("bt-"+h);
+    console.log("No Firebase, using localStorage");
+    var l=localStorage.getItem("bt-"+h);
     S.data=l?JSON.parse(l):JSON.parse(JSON.stringify(DEF));
   }
   ensureStructure();
@@ -545,8 +558,36 @@ function save(){
   _saveTimer=setTimeout(_doSave,500);
 }
 function saveNow(){clearTimeout(_saveTimer);_doSave()}
+function forceSync(){
+  if(!db){toast("No Firebase connection");return}
+  if(!S.data){toast("No data to sync");return}
+  var btn=event.target;btn.textContent="Syncing...";
+  sha(S.pin).then(function(h){
+    var ref=db.ref("budgets/"+h);
+    // Push local → Firebase
+    ref.set(S.data).then(function(){
+      // Pull Firebase → local (to confirm)
+      ref.once("value").then(function(snap){
+        if(snap.exists()){
+          S.data=snap.val();
+          ensureStructure();
+          localStorage.setItem("bt-"+h,JSON.stringify(S.data));
+          render();
+          toast("Synced ✓ — data pushed to cloud");
+        } else {
+          toast("Sync failed — data not found after push");
+        }
+        btn.textContent="Sync data now";
+      });
+    }).catch(function(e){
+      toast("Sync error: "+e.message);
+      btn.textContent="Sync data now";
+    });
+  });
+}
+
 function _doSave(){
-  if(dbRef)dbRef.set(S.data);
+  if(dbRef){dbRef.set(S.data).catch(function(e){console.error("Firebase save error:",e)})}
   const code=localStorage.getItem("bt-sync")||S.pin;
   sha(code).then(h=>localStorage.setItem("bt-"+h,JSON.stringify(S.data)));
 }
@@ -2534,6 +2575,7 @@ function _render(){
     h+=`<div class="sec"><div class="sh"><span class="sh-t">Data</span><span class="sh-v"></span></div>
       <div style="padding:5px 0;display:flex;flex-direction:column;gap:5px">
         <button class="add" onclick="exportData()">Export backup (JSON)</button>
+        <button class="add" onclick="forceSync()">Sync data now</button>
         <button class="add" onclick="cleanGroupTxs()">Remove group-logged transactions</button>
         <button class="add" onclick="S.modal={type:'resetmonth'};render()">Reset current month's transactions</button>
         <button class="add" onclick="recalcAll()">Recalculate all totals</button>
