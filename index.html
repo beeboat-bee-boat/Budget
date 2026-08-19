@@ -354,7 +354,7 @@ function hasFC(){return FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.databaseURL}
 function initFB(){if(!hasFC())return false;try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database();return true}catch{return false}}
 
 async function connect(pin){
-  const h=await sha(pin);
+  var h=await sha(pin);
   if(db){
     dbRef=db.ref("budgets/"+h);
     const snap=await dbRef.once("value");
@@ -365,6 +365,7 @@ async function connect(pin){
     const l=localStorage.getItem("bt-"+h);
     S.data=l?JSON.parse(l):JSON.parse(JSON.stringify(DEF));
   }
+  ensureStructure();
   // Net worth accounts from onboarding
   if(S.obAccounts&&S.obAccounts.length){
     S.data.networth={accounts:[]};
@@ -376,12 +377,11 @@ async function connect(pin){
   if(!S.data.networth.accounts.find(a=>a.label==="Unsorted"))S.data.networth.accounts.push({id:uid(),label:"Unsorted",type:"asset",balances:{}});
   // Ensure savings category exists with savings goal amount
   if(S.obSavingsGoal>0){
-    let savCat2=S.data.template.categories.find(c2=>c2.name==="Savings");
+    var savCat2=S.data.template.categories.find(function(c2){return c2.name==="Savings"});
     if(!savCat2){savCat2={id:uid(),name:"Savings",items:[]};S.data.template.categories.push(savCat2)}
-    if(!savCat2.items.find(i=>i.label==="Savings")){savCat2.items.push({id:uid(),label:"Savings",amount:S.obSavingsGoal,recurring:true,note:""})}
-    else{const si=savCat2.items.find(i=>i.label==="Savings");si.amount=S.obSavingsGoal;si.recurring=true}
+    if(!savCat2.items.find(function(i){return i.label==="Savings"})){savCat2.items.push({id:uid(),label:"Savings",amount:S.obSavingsGoal,recurring:true,note:""})}
+    else{var si2=savCat2.items.find(function(i){return i.label==="Savings"});si2.amount=S.obSavingsGoal;si2.recurring=true}
   }
-  ensureStructure();
   archiveOldMonths();
   if(S.data.theme&&THEMES[S.data.theme])applyTheme(S.data.theme);
   S.pin=pin;S.phase="app";
@@ -3525,24 +3525,33 @@ async function doChangePass(){
   toast("Password changed");
 }
 
+function tryLogin(){
+  var btn=document.getElementById("login-btn");
+  if(btn)btn.textContent="Logging in...";
+  doLogin().catch(function(e){
+    S.err="Error: "+e.message;render();
+  });
+}
+
 async function doLogin(){
-  const user=document.getElementById("login-user").value.trim();
-  const pass=document.getElementById("login-pass").value;
+  var user=(document.getElementById("login-user")||{}).value||"";user=user.trim();
+  var pass=(document.getElementById("login-pass")||{}).value||"";
   if(!user||!pass){S.err="Enter username and password";render();return}
-  const code=await deriveCode(user,pass);
-  // Check if account exists before connecting
-  if(db){
-    const h=await sha(code);
-    const snap=await db.ref("budgets/"+h).once("value");
-    if(!snap.exists()){S.err="Account not found. Check your username and password, or create a new account.";render();return}
-  } else {
-    const h2=await sha(code);
-    if(!localStorage.getItem("bt-"+h2)){S.err="No account found on this device.";render();return}
-  }
-  localStorage.setItem("bt-user",user);
-  localStorage.setItem("bt-sync",code);
-  S.pin=code;
-  await connect(code);
+  try{
+    var code=await deriveCode(user,pass);
+    if(db){
+      var h=await sha(code);
+      var snap=await db.ref("budgets/"+h).once("value");
+      if(!snap.exists()){S.err="Account not found. Check your username and password.";render();return}
+    } else {
+      var h2=await sha(code);
+      if(!localStorage.getItem("bt-"+h2)){S.err="No account found on this device.";render();return}
+    }
+    localStorage.setItem("bt-user",user);
+    localStorage.setItem("bt-sync",code);
+    S.pin=code;
+    await connect(code);
+  }catch(e){S.err="Login failed: "+e.message;render()}
 }
 
 async function autoStart(){
@@ -3570,9 +3579,9 @@ function renderWelcome(){
       // Returning user login
       h+=`<div style="width:100%;max-width:300px;margin-top:8px">
         <input id="login-user" class="ob-input" style="text-align:left" maxlength="50" placeholder="Username" value="${esc(localStorage.getItem('bt-user')||'')}" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
-        <input id="login-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')document.getElementById('login-btn').click()">
+        <input id="login-pass" class="ob-input" style="text-align:left" maxlength="100" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
         ${S.err?'<div style="color:var(--rd);font-size:13px;margin:6px 0">'+S.err+'</div>':''}
-        <button id="login-btn" class="ob-btn" style="width:100%;margin-top:4px" onmousedown="event.preventDefault();doLogin()">Log in</button>
+        <button id="login-btn" class="ob-btn" style="width:100%;margin-top:4px" onclick="tryLogin()">Log in</button>
         <button class="ob-skip" onclick="S.welcomeMode=null;S.err='';render()">Back</button>
       </div>`;
     } else if(S.welcomeMode==="recovery"){
