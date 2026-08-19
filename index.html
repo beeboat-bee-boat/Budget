@@ -385,6 +385,7 @@ async function connect(pin){
   archiveOldMonths();
   if(S.data.theme&&THEMES[S.data.theme])applyTheme(S.data.theme);
   S.pin=pin;S.phase="app";
+  if(S._recoveredNeedsCreds){delete S._recoveredNeedsCreds;S.modal={type:'setcreds'}}
   try{render()}catch(e){console.error("Initial render failed:",e);S.view="budget";S.budgetView="dash";S.modal=null;S.expanded={};S.collapsed={};render()}
 }
 
@@ -1012,10 +1013,71 @@ function doJoinGroup(){
   joinGroup(c2);closeModal();
 }
 
+async function saveNewCreds(){
+  var user=(document.getElementById('sc-user')||{}).value||'';user=user.trim();
+  var pass=(document.getElementById('sc-pass')||{}).value||'';
+  var pass2=(document.getElementById('sc-pass2')||{}).value||'';
+  var errEl=document.getElementById('sc-err');
+  if(!user||user.length<3){if(errEl)errEl.textContent='Username must be at least 3 characters';return}
+  if(!pass||pass.length<4){if(errEl)errEl.textContent='Password must be at least 4 characters';return}
+  if(pass!==pass2){if(errEl)errEl.textContent='Passwords do not match';return}
+  // Check username uniqueness
+  if(db){
+    var taken=await db.ref('usernames/'+user.toLowerCase()).once('value');
+    var oldUser=(S.data.userName||'').toLowerCase();
+    if(taken.exists()&&taken.val()!==S.pin&&user.toLowerCase()!==oldUser){
+      if(errEl)errEl.textContent='Username already taken';return;
+    }
+    // Reserve new username, release old
+    if(oldUser&&oldUser!==user.toLowerCase())await db.ref('usernames/'+oldUser).remove();
+    await db.ref('usernames/'+user.toLowerCase()).set(S.pin);
+  }
+  // Update credentials
+  var newCode=await deriveCode(user,pass);
+  // Move data to new sync code
+  if(db&&dbRef){
+    var data=S.data;
+    var newHash=await sha(newCode);
+    await db.ref('budgets/'+newHash).set(data);
+    if(newCode!==S.pin){var oldHash=await sha(S.pin);await db.ref('budgets/'+oldHash).remove()}
+    dbRef=db.ref('budgets/'+newHash);
+  }
+  S.data.userName=user;
+  localStorage.setItem('bt-sync',newCode);localStorage.setItem('bt-user',user);
+  S.pin=newCode;save();closeModal();toast('Credentials updated');
+}
+
+async function changeUsername(){
+  var user=(document.getElementById('cu-user')||{}).value||'';user=user.trim();
+  var errEl=document.getElementById('cu-err');
+  if(!user||user.length<3){if(errEl)errEl.textContent='Username must be at least 3 characters';return}
+  var pass=(document.getElementById('cu-pass')||{}).value||'';
+  if(!pass||pass.length<4){if(errEl)errEl.textContent='Enter your current password to confirm';return}
+  // Check uniqueness
+  if(db){
+    var taken=await db.ref('usernames/'+user.toLowerCase()).once('value');
+    if(taken.exists()&&taken.val()!==S.pin){if(errEl)errEl.textContent='Username already taken';return}
+    var oldUser=(S.data.userName||'').toLowerCase();
+    if(oldUser)await db.ref('usernames/'+oldUser).remove();
+    await db.ref('usernames/'+user.toLowerCase()).set(S.pin);
+  }
+  // Derive new code with new username + existing password
+  var newCode=await deriveCode(user,pass);
+  if(db&&dbRef){
+    var data=S.data;var newHash=await sha(newCode);
+    await db.ref('budgets/'+newHash).set(data);
+    if(newCode!==S.pin){var oldHash=await sha(S.pin);await db.ref('budgets/'+oldHash).remove()}
+    dbRef=db.ref('budgets/'+newHash);
+  }
+  S.data.userName=user;
+  localStorage.setItem('bt-sync',newCode);localStorage.setItem('bt-user',user);
+  S.pin=newCode;save();closeModal();toast('Username changed to '+user);
+}
+
 function doRecoverCode(){
   var c2=(document.getElementById('sync-input')||{}).value||'';c2=c2.trim().toUpperCase();
   if(c2.length<8){S.err='Code too short';render();return}
-  localStorage.setItem('bt-sync',c2);S.pin=c2;connect(c2);
+  localStorage.setItem('bt-sync',c2);S.pin=c2;S._recoveredNeedsCreds=true;connect(c2);
 }
 
 function addCustomFixed(){
@@ -2470,7 +2532,8 @@ function _render(){
       <div style="margin-bottom:8px">${localStorage.getItem('bt-user')?'<div style="font-size:12px;color:var(--t2);margin-bottom:2px">Logged in as</div><div style="font-size:15px;font-weight:600;margin-bottom:8px">'+esc(localStorage.getItem('bt-user'))+'</div>':''}
       <div style="font-size:12px;color:var(--t2);margin-bottom:2px">Recovery code — screenshot this</div></div>
       <button class="add" onclick="startReOnboard()">Edit setup (income, categories, cards)</button>
-      <button class="add" onclick="S.modal={type:'changepass'};render()">Change password</button>
+      <button class="add" onclick="S.modal={type:'changeuser'};render()">Change username</button>
+        <button class="add" onclick="S.modal={type:'changepass'};render()">Change password</button>
       <button class="add" style="color:var(--rd);border-color:var(--rd)" onclick="customConfirm('Log out? You will need your sync code to reconnect.',()=>{localStorage.removeItem('bt-sync');location.reload()})">Log out</button>
       <button class="add" style="color:var(--rd);border-color:var(--rd);margin-top:4px" onclick="customConfirm('Start over? This will erase ALL your data and reset the app. This cannot be undone.',()=>{localStorage.clear();location.reload()})">Start over</button>
     </div></div>`;
@@ -2919,6 +2982,13 @@ function renderModal(){
     h+=`<div id="sort-status" style="text-align:center;margin-top:10px;font-size:14px;font-weight:600;color:${left<0?'var(--rd)':left===0?'var(--gn)':'var(--t2)'}">${left<0?'Over by '+fmt(Math.abs(left)):left===0?'✓ Fully allocated':fmt(left)+' remaining'}</div>`;
     h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" style="${left<0?'opacity:0.4;pointer-events:none':''}" onclick="applySortFunds()">Apply</button></div>`;
   }
+  else if(m.type==="changeuser"){
+    h+=`<h3>Change username</h3>
+      <label>New username</label><input id="cu-user" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" value="${esc(S.data.userName||'')}">
+      <label>Current password (to confirm)</label><input id="cu-pass" class="ob-input" style="text-align:left;margin:4px 0" type="password" maxlength="100" placeholder="Enter your password">
+      <div id="cu-err" style="color:var(--rd);font-size:12px;margin:4px 0"></div>
+      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="changeUsername()">Save</button></div>`;
+  }
   else if(m.type==="changepass"){
     h+=`<h3>Change password</h3>
       <label>Current password</label><input id="m-oldpass" type="password" maxlength="100" class="ob-input" style="text-align:left;margin:4px 0" placeholder="Current password">
@@ -3009,6 +3079,15 @@ function renderModal(){
     h+=`<h3>Reset ${monthLabel(S.month)}</h3>
       <div style="font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:12px">This will remove all <b>${manualCount} manual transactions</b> for ${monthLabel(S.month)}. Recurring auto-filled items will stay. Budget amounts stay. Cannot be undone.</div>
       <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="dg" onclick="resetMonthTxs()">Reset</button></div>`;
+  }
+  else if(m.type==="setcreds"){
+    h+=`<h3>Set your login</h3>
+      <div style="font-size:13px;color:var(--t2);margin-bottom:10px">Set a username and password so you can log in on any device.</div>
+      <label>Username</label><input id="sc-user" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" placeholder="Pick a username" value="${esc(S.data.userName||'')}">
+      <label>New password</label><input id="sc-pass" class="ob-input" style="text-align:left;margin:4px 0" type="password" maxlength="100" placeholder="Password (4+ characters)">
+      <label>Confirm password</label><input id="sc-pass2" class="ob-input" style="text-align:left;margin:4px 0" type="password" maxlength="100" placeholder="Confirm password">
+      <div id="sc-err" style="color:var(--rd);font-size:12px;margin:4px 0"></div>
+      <div class="mbs"><button class="cn" onclick="closeModal()">Skip</button><button class="sv" onclick="saveNewCreds()">Save</button></div>`;
   }
   else if(m.type==="editacct"){
     const acct3=S.data.networth.accounts[m.ai];
@@ -3770,6 +3849,7 @@ async function startOnboardFinish(){
   let code;
   if(S.obUser&&S.obPass){code=await deriveCode(S.obUser,S.obPass);localStorage.setItem('bt-user',S.obUser)}else{code=generateSyncCode()}
   localStorage.setItem('bt-sync',code);S.pin=code;
+  if(db&&S.obUser)db.ref('usernames/'+S.obUser.toLowerCase()).set(code);
   S.data=JSON.parse(JSON.stringify(DEF));S.data.userName=S.obName||"";
   const amts=S.obIncomeAmts||{};const it=S.obIncomeType;
   if(it==="salary")S.data.template.income.push({id:uid(),label:"Salary",amount:amts.salary||0,recurring:true,note:""});
