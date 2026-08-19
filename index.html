@@ -2062,7 +2062,7 @@ function _render(){
     const tI=md.income.reduce((s,x)=>s+txTotal(x),0),tIB=md.income.reduce((s,x)=>s+x.budgeted,0);
     const tE=md.categories.reduce((s,c2)=>s+c2.items.reduce((ss,x)=>ss+txTotal(x),0),0);
     const tEB=md.categories.reduce((s,c2)=>s+c2.items.reduce((ss,x)=>ss+x.budgeted,0),0);
-    const net=tI-tE;
+    var net=tI-tE;
 
     if(S.budgetView==="in"){
       // === MONEY IN DETAIL ===
@@ -2091,15 +2091,34 @@ function _render(){
       if(S._localMode){
         h+=`<div style="background:rgba(224,112,85,.08);border:1px solid rgba(224,112,85,.25);border-radius:10px;padding:12px 14px;margin:0 16px 8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:13px;font-weight:600;color:var(--rd)">Demo mode</div><div style="font-size:11px;color:var(--t2);margin-top:2px">Nothing saves when you close this tab</div></div><button style="font-size:12px!important;padding:8px 14px!important;background:var(--ac)!important;color:white!important;border:none!important;border-radius:8px!important;font-weight:600" onclick="linkGoogle()">Sign in</button></div><div style="display:flex;gap:6px"><button style="flex:1;font-size:11px!important;padding:6px!important;background:rgba(255,255,255,.05)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important;min-height:auto!important" onclick="exportCSV()">Export CSV</button><button style="flex:1;font-size:11px!important;padding:6px!important;background:rgba(255,255,255,.05)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important;min-height:auto!important" onclick="exportData()">Export JSON</button></div></div>`;
       }
+      // Unclosed months reminder
+      var unclosedMonths=[];
+      var checkMo=S.data._startMonth||mk();
+      var curMo=mk();
+      var tmpDate=new Date(checkMo+"-15");
+      while(mk(tmpDate)<curMo){
+        var moKey=mk(tmpDate);
+        if(S.data.months[moKey]&&!S.data._closed[moKey]){unclosedMonths.push(moKey)}
+        tmpDate.setMonth(tmpDate.getMonth()+1);
+      }
+      if(unclosedMonths.length>0){
+        h+=`<div style="background:rgba(219,181,110,.08);border:1px solid rgba(219,181,110,.2);border-radius:10px;padding:12px 14px;margin:0 16px 8px">`;
+        h+=`<div style="font-size:13px;font-weight:600;color:var(--or)">📋 ${unclosedMonths.length} month${unclosedMonths.length>1?'s':''} to close</div>`;
+        h+=`<div style="font-size:11px;color:var(--t2);margin:4px 0 8px">${unclosedMonths.map(function(m2){return monthLabel(m2)}).join(', ')}</div>`;
+        h+=`<button style="width:100%;padding:8px!important;background:rgba(219,181,110,.1)!important;border:1px solid rgba(219,181,110,.25)!important;color:var(--or)!important;border-radius:8px!important;font-size:12px!important;font-weight:600" onclick="S.month='${unclosedMonths[0]}';S.modal={type:'closemonth'};render()">Close ${monthLabel(unclosedMonths[0])}</button>`;
+        h+=`</div>`;
+      }
+
       // Running total across all months
-      let runTotal=0;
+      var runTotal=0;
       const curMoHist=mk();const startMoHist=S.data._startMonth||curMoHist;
       const sortedMonths=Object.keys(S.data.months||{}).filter(m2=>m2>=startMoHist&&m2<=curMoHist).sort();
-      sortedMonths.forEach(m2=>{const md2=S.data.months[m2];if(!md2)return;const mI=md2.income.reduce((s,x)=>s+txTotal(x),0);const mE=md2.categories.reduce((s,c2)=>s+c2.items.reduce((ss,x)=>ss+txTotal(x),0),0);runTotal+=mI-mE});
+      var savCatsR=['Savings','Goals'];
+      sortedMonths.forEach(function(m2){var md2=S.data.months[m2];if(!md2)return;var mI=md2.income.reduce(function(s,x){return s+txTotal(x)},0);var mE=md2.categories.filter(function(c2){return savCatsR.indexOf(c2.name)===-1}).reduce(function(s,c2){return s+c2.items.reduce(function(ss,x){return ss+txTotal(x)},0)},0);runTotal+=mI-mE});
 
       h+=`<div class="cnt" style="padding-top:0">`;
       // Running total
-      h+=`<div class="dash-total"><div class="big" style="color:${runTotal>=0?'var(--gn)':'var(--rd)'}">${fmt(runTotal)}</div><div class="sub">${acctTerm('Total saved')} · all months</div></div>`;
+      h+=`<div class="dash-total"><div class="big" style="color:${runTotal>=0?'var(--gn)':'var(--rd)'}">${runTotal>=0?'+':''}${fmt(runTotal)}</div><div class="sub">${runTotal>=0?acctTerm('Net surplus'):'Net deficit'} · all months</div></div>`;
       // This month net
       // Today's spending
       const todayISO=new Date().toISOString().split('T')[0];
