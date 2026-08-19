@@ -495,11 +495,15 @@ async function connectWithUid(uid,displayName){  try{
     var snap=await dbRef.once("value");
     if(snap.exists()){
       S.data=snap.val();
-          } else {
+      // Check if this is effectively empty/default data (never onboarded)
+      var tmpl=S.data.template||{};
+      var hasSetup=(tmpl.income&&tmpl.income.length>0)||(tmpl.categories&&tmpl.categories.length>2);
+      if(!hasSetup)S._isNewUser=true;
+    } else {
       S.data=JSON.parse(JSON.stringify(DEF));
       S.data.userName=displayName||"";
       await dbRef.set(S.data);
-            S._isNewUser=true;
+      S._isNewUser=true;
     }
     ensureStructure();
     dbRef.on("value",function(s){if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){}}});
@@ -4070,7 +4074,7 @@ function startReOnboard(){
   S._existingStreak=d.streakDate;
   S._existingEmojis=JSON.parse(JSON.stringify(d.catEmojis||{}));
   
-  S.phase="welcome";S.obStep=2;S.err=""; // Skip step 1 (account creation) - go straight to income
+  S._showWalkthrough=false;S.phase="welcome";S.obStep=2;S.err=''; // Go to income step
   render();
   toast("Editing your setup — your history is preserved");
 }
