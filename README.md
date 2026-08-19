@@ -1,137 +1,186 @@
 https://beeboat-bee-boat.github.io/Budget/ link to project
 
-Budget Tracker v0.1 — Release Notes
+What is it
 
-A personal budget tracker built as a single-file PWA. No app store, no subscription, no ads. Just open the link and start tracking.
+BetterBudget is a personal finance PWA built as a single HTML file. No backend, no subscription, no ads. Sign in with Google to sync across devices, or use without an account.
 
-What it does
+Built for people who want to actually understand where their money goes — and for sales reps who want to learn how closing the books works by doing it with their own finances.
 
-Budget Tracker helps you manage your monthly money — what's coming in, what's going out, what you owe, and what you're saving toward. Everything syncs across devices through Firebase and works offline as a PWA.
+Core Features
 
-Features
+Budgeting
 
-💰 Monthly Budget
+Monthly budget with Money In / Money Out tracking
 
-Set up income (salary, hourly, base + commission, freelance)
+Recurring expenses with [Pay] confirmation — nothing counts until you say it happened
 
-Organize spending into customizable categories and items
+Dashboard with spending breakdown, recent transactions, bills due, and group activity
 
-Smart onboarding recommends budgets based on your income and savings goal
+Savings rate, spending velocity, and running total across months
 
-Edit budgets anytime — changes sync to all future months automatically
+Close the month with a checklist, sort surplus into accounts, lock the period
 
-↻ Recurring Expenses
+Quick Add
 
-Mark any expense as recurring with one tap
+Persistent [+ Add] button in the header on every page
 
-Choose Ongoing (rent, insurance) or Has a balance (loans, financing)
+4 tabs: Expense, Income, Payment, Deposit — always accessible
 
-Balance items track remaining debt with optional APR and payoff estimates
+Inline creation everywhere: new categories, items, income sources, cards, accounts — without leaving your flow
 
-Confirm payments monthly with a [Pay] button — nothing counts until you say so
+Cancel on sub-modals returns to quick-add with all inputs preserved
 
-Auto-completes when a balance hits $0
+Credit Cards
 
-💳 Credit Cards
+Track balances, limits, APR, minimum payments, statement dates
 
-Track balances, limits, interest rates, and billing dates
+Payoff planner with month-by-month projections (avalanche method)
 
-Debt payoff planner with month-by-month simulation (6/12/18/24 month targets)
+Timeline picker: 6 / 12 / 18 / 24 / custom months
 
-Automatic interest calculation using the avalanche method
+Interest calculations with real amortization math
 
-Utilization tracking across all cards
+Groups
 
-👥 Group Expenses
+Create groups, add members, split expenses
 
-Create groups, add members, split bills
+Equal or custom split amounts with live validation
 
-Equal or custom splits with live validation
+"Who paid?" selector — track when others pay, not just you
 
-Settle up tracking with per-person balances
+Settle up with full context of what expenses were covered
 
-All group data stored locally — no account needed for group members
+Transaction history with expenses and settlements in one log
 
-🎯 Goals
+Dashboard card showing who owes you (green) and who you owe (red)
 
-Save up goals (green) — track progress toward a savings target
+Goals
 
-Pay down goals (red) — track debt payoff progress
+Savings goals (saving toward a target) and payoff goals (paying down a balance)
 
-Goals link to your budget items and sync automatically when you confirm payments
+Color-coded: green for saving, red for paying off
 
-Trophy case for completed goals with edit/restore/remove
+Trophy case for completed goals
 
-📊 Trends
+Trends
 
-Charts — monthly income vs expenses over time
+Charts: by category, income vs spending, this month breakdown
 
-Transactions — searchable log with filters (type, source, payment method, time range)
+Transaction log: searchable, filterable by type / source / method / time
 
-Summary — year-to-date totals and top spending categories
+Summary: year-to-date overview
 
-🏦 Net Worth
+CSV and JSON export right from the Transactions tab
 
-Track bank accounts with monthly balances
+Alerts
 
-Month-end close flow: review finances, sort surplus into accounts
+Budget overages, card utilization, unpaid recurring bills, negative accounts, spending > income
 
-Unassigned money pool for funds you haven't allocated yet
+Each alert includes what's wrong, the numbers, and exactly where to go to fix it
 
-🔒 Accounts & Sync
+Customizable thresholds: dollar amount for budget overages, percentage for card utilization
 
-Username + password login with deterministic sync codes
+Toast notification with [View] button after any transaction that triggers an alert
 
-Data syncs across devices via Firebase Realtime Database
+Alerts surface in the Close Month checklist as warnings (proceed with "Close anyway")
 
-Export/import JSON backups
+Accountant Mode
 
-Change password, recover account with sync code
 
-🎨 Themes
 
-6 built-in themes: Bee (default), Ocean, Sunset, Midnight, Forest, Slate
+Toggle in More > Appearance. Swaps all labels to real accounting terminology and adds a Financials tab under Trends.
 
-One-tap switching in settings with instant preview
 
-⚙️ Settings
 
-Subscriptions tracker (auto-appears in recurring bills)
+Standard	Accountant Mode
 
-Customizable start month for budget history
+Budget	General Ledger
 
-Timezone setting
+Money In	Revenue Recognition
 
-Storage monitor
+Money Out	Operating Expenses
 
-Data tools: reset month, recalculate totals, clean group transactions
+Close Month	Close Period
 
-Technical Details
+Groups	Entities
 
-Single HTML file — no build tools, no dependencies, no server
+Owed to you	Accounts Receivable
 
-PWA — installable on mobile, works offline
+You owe	Accounts Payable
 
-~250 KB total size
+Spending breakdown	Cost Center Analysis
 
-Firebase Realtime Database for cross-device sync
+Net Worth	Statement of Net Position
 
-GitHub Pages hosting (free)
+Financial Statements (Accountant Mode only)
 
-Known Limitations (v0.1)
+Income Statement — Revenue, Operating Expenses, Net Income with margin %
 
-Single-file architecture means no code splitting — the whole app loads at once
+Balance Sheet — Assets, Liabilities, Equity with account numbers
 
-Charts require an internet connection (Chart.js loaded from CDN)
+Journal Entries — Every transaction shown as DR/CR with account codes
 
-Group data is local-only (not synced via Firebase)
+Budget Variance Report — Budget vs Actual with dollar and percentage variance
 
-No multi-currency support
+Auth & Sync
 
-No receipt/photo attachments
+Google Sign-In via Firebase Auth — one tap, works across devices
 
-No bank connection or auto-import
+Local mode — get started without an account, link Google later
 
+Timestamp-based conflict resolution — newer version wins when syncing across devices
+
+Local backup — data always saved to localStorage alongside Firebase
+
+Save safety — saves on visibility change, tab switch, beforeunload, and pagehide
+
+Design
+
+Inter font, dark navy/purple theme (midnight default)
+
+6 themes: midnight, bee, ocean, sunset, forest, mono
+
+Sticky header with context buttons + permanent [+ Add]
+
+Bottom sheet modals with slide-up animation (no replay on re-render)
+
+Scroll position and input values preserved across modal interactions
+
+44px minimum touch targets, number input validation (no letters, 2 decimal max)
+
+Lazy-loaded Chart.js, memoized calculations, requestAnimationFrame render batching
+
+Onboarding
+
+Income — salary, hourly, base + commission, freelance, commission only
+
+Categories — pick from suggestions or create custom, including Loans
+
+Budget plan — suggested allocations, debt items auto-detected with balance + APR fields
+
+Credit cards — add with balance, limit, APR, min payment, statement date
+
+Walkthrough — 7-step guided tour of the app
+
+
+
+Re-onboarding (More > Edit setup) preserves all transaction history.
+
+
+
+Technical
+
+Single HTML file, 4,779 lines, 302 KB
+
+Firebase Realtime Database + Firebase Auth (Google Sign-In)
+
+No build step, no dependencies, no npm
+
+GitHub Pages hosting
+
+No-cache meta tags for instant updates
+
+CSV export/import for data portability
 
 
 
