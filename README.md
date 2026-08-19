@@ -1,4 +1,5 @@
 https://beeboat-bee-boat.github.io/Budget/ - link to project
+
 Budget Tracker v0.1 — Release Notes
 
 A personal budget tracker built as a single-file PWA. No app store, no subscription, no ads. Just open the link and start tracking.
