@@ -3632,26 +3632,31 @@ async function doLogin(){
   var pass=S._loginPass||(document.getElementById("login-pass")||{}).value||"";pass=pass.trim();
   if(!user||!pass){S.err="Enter username and password";render();return}
   try{
-    var code=await deriveCode(user,pass);
     if(db){
-      // Verify username+password match
+      // Look up username
       var usnap=await db.ref('usernames/'+user).once('value');
-      if(usnap.exists()){
-        var udata=usnap.val();
-        var storedPassHash=typeof udata==='object'?udata.passHash:null;
-        if(storedPassHash){
-          var inputPassHash=await sha(pass);
-          if(inputPassHash!==storedPassHash){
-            S.err='Wrong password for '+user+'.';render();return;
-          }
+      if(!usnap.exists()){
+        S.err='No account found for '+user+'.';render();return;
+      }
+      var udata=usnap.val();
+      // Verify password
+      if(typeof udata==='object'&&udata.passHash){
+        var inputPassHash=await sha(pass);
+        if(inputPassHash!==udata.passHash){
+          S.err='Wrong password.';render();return;
         }
       }
-      var h=await sha(code);
+      // Get the stored sync code and budget path
+      var code=typeof udata==='object'?udata.code:udata;
+      var h=udata.budgetPath||await sha(code);
+      console.log("Login: user="+user+", budgets/"+h.substring(0,8)+"...");
       var snap=await db.ref("budgets/"+h).once("value");
       if(!snap.exists()){
-        S.err='No account found for '+user+'. Check spelling.';render();return;
+        S.err='Account data not found. Try your recovery code instead.';render();return;
       }
     } else {
+      // Offline: try deriveCode as fallback
+      var code=await deriveCode(user,pass);
       var h2=await sha(code);
       if(!localStorage.getItem("bt-"+h2)){S.err="No account found on this device.";render();return}
     }
@@ -3963,10 +3968,15 @@ function renderWelcome(){
 function finishOnboarding(){
   startOnboardFinish();return}
 async function startOnboardFinish(){
-  let code;
-  if(S.obUser&&S.obPass){code=await deriveCode(S.obUser,S.obPass);localStorage.setItem('bt-user',S.obUser)}else{code=generateSyncCode()}
+  var code=generateSyncCode();
+  if(S.obUser)localStorage.setItem('bt-user',S.obUser);
   localStorage.setItem('bt-sync',code);S.pin=code;
-  if(db&&S.obUser)await db.ref('usernames/'+S.obUser.toLowerCase()).set({code:code,passHash:await sha(S.obPass)});
+  var budgetHash;
+  if(db&&S.obUser){
+    budgetHash=await sha(code);
+    await db.ref('usernames/'+S.obUser.toLowerCase()).set({code:code,passHash:await sha(S.obPass),budgetPath:budgetHash});
+    console.log("Account created. Username:",S.obUser,"budgetPath:",budgetHash.substring(0,8)+"...");
+  }
   S.data=JSON.parse(JSON.stringify(DEF));S.data.userName=S.obName||"";
   const amts=S.obIncomeAmts||{};const it=S.obIncomeType;
   if(it==="salary")S.data.template.income.push({id:uid(),label:"Salary",amount:amts.salary||0,recurring:true,note:""});
@@ -4023,7 +4033,16 @@ async function startOnboardFinish(){
     delete S._existingGroups;delete S._existingNetworth;delete S._existingNotes;
     delete S._existingQuickBtns;delete S._existingStreak;delete S._existingEmojis;
   }
-  S.phase="app";S.month=mk();save();render();
+  S.phase="app";S.month=mk();
+  // Save to Firebase
+  if(db){
+    var h2=await sha(S.pin);
+    dbRef=db.ref("budgets/"+h2);
+    await dbRef.set(S.data);
+    console.log("Account saved to Firebase at budgets/"+h2.substring(0,8)+"...");
+    dbRef.on("value",function(s){if(s.exists()&&S.phase==="app"){S.data=s.val();ensureStructure();try{render()}catch(e){}}});
+  }
+  save();render();
 }
 
 let groupRefs={};let groupDatas={};
