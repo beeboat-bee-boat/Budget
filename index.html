@@ -286,7 +286,7 @@ async function connect(pin){
   archiveOldMonths();
   if(S.data.theme&&THEMES[S.data.theme])applyTheme(S.data.theme);
   S.pin=pin;S.phase="app";
-  if(S._recoveredNeedsCreds){delete S._recoveredNeedsCreds;S.modal={type:'setcreds'}}
+
   try{render()}catch(e){console.error("Initial render failed:",e);S.view="budget";S.budgetView="dash";S.modal=null;S.expanded={};S.collapsed={};render()}
 }
 
@@ -390,11 +390,14 @@ function archiveOldMonths(){
 }
 
 function ensureStructure(){
-  if(!S.data||typeof S.data!=="object"){S.data=JSON.parse(JSON.stringify(DEF));return}
+  if(!S.data||typeof S.data!=="object"||Array.isArray(S.data)){S.data=JSON.parse(JSON.stringify(DEF));return}
   const d=S.data;
-  if(!d.template)d.template=JSON.parse(JSON.stringify(DEF.template));
-  if(!d.months)d.months={};
-  if(!d.goals)d.goals={active:[],completed:[]};
+  if(!d.template||typeof d.template!=="object")d.template=JSON.parse(JSON.stringify(DEF.template));
+  if(!Array.isArray(d.template.income))d.template.income=[];
+  if(!Array.isArray(d.template.categories))d.template.categories=JSON.parse(JSON.stringify(DEF.template.categories||[]));
+  if(!d.months||typeof d.months!=="object"||Array.isArray(d.months))d.months={};
+  if(!d.goals||typeof d.goals!=="object")d.goals={active:[],completed:[]};
+  if(!Array.isArray(d.goals.active))d.goals.active=[];
   (d.groups||[]).forEach(g=>{if(!g.members)g.members={};if(!g.expenses)g.expenses=[]});
   if(d.groupMoney&&d.groupMoney.length>200)d.groupMoney=d.groupMoney.slice(-200);
   if(!d.goals.completed)d.goals.completed=[];
@@ -427,10 +430,13 @@ function ensureStructure(){
   if(!d._startMonth)d._startMonth=mk();
   if(!d.timezone)d.timezone=Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone||'';
   if(!d.subscriptions)d.subscriptions=[];
-  // Tag hourly and freelance income items
+  // Tag income item types
   (d.template?.income||[]).forEach(function(i){
-    if(i.label&&i.label.toLowerCase().indexOf('hourly')!==-1&&!i.hourlyRate)i.hourlyRate=0;
-    if(i.label&&(i.label.toLowerCase().indexOf('freelance')!==-1||i.label.toLowerCase().indexOf('gig')!==-1||i.label.toLowerCase().indexOf('contract')!==-1))i.isFreelance=true;
+    if(!i.label)return;
+    var ll=i.label.toLowerCase();
+    if(ll.indexOf('hourly')!==-1&&!i.hourlyRate)i.hourlyRate=0;
+    if((ll.indexOf('freelance')!==-1||ll.indexOf('gig')!==-1||ll.indexOf('contract')!==-1||ll.indexOf('milestone')!==-1)&&!i.isFreelance)i.isFreelance=true;
+    if((ll.indexOf('commission')!==-1||ll.indexOf('comm')!==-1)&&!i.isCommission)i.isCommission=true;
   });
   if(!d.debts.cards)d.debts.cards=[];
   d.debts.cards.forEach(cd=>{if(!cd.payments)cd.payments=[];if(!cd.id)cd.id=uid()});
@@ -856,7 +862,7 @@ function renameCategory(catId,name){
 
 // ===== TRANSACTION HELPERS =====
 var _txCache=new WeakMap();
-function txTotal(item){if(_txCache.has(item)){var cv=_txCache.get(item);if(cv.len===item.transactions.length)return cv.val}return(item.transactions||[]).reduce((s,t)=>s+(t.amount||0),0)}
+function txTotal(item){if(!item)return 0;var txs=item.transactions||[];if(_txCache.has(item)){var cv=_txCache.get(item);if(cv.len===txs.length)return cv.val}var total=Math.round(txs.reduce(function(s,t){return s+(t.amount||0)},0)*100)/100;_txCache.set(item,{len:txs.length,val:total});return total}
 
 function getItemFromMonth(md,itemId,catId){
   if(catId===null)return findById(md.income,itemId);
@@ -913,9 +919,22 @@ function saveNewSource(){
   var name=(document.getElementById('m-newsrc')||{}).value||'';name=name.trim();
   if(!name){toast('Enter a name');return}
   var newId=uid();
-  S.data.template.income.push({id:newId,label:name,amount:0,recurring:false});
+  var srcType=(S.modal&&S.modal.srcType)||'salary';
+  var hrate=parseFloat((document.getElementById('m-hrate')||{}).value)||0;
+  var srcamt=parseFloat((document.getElementById('m-srcamt')||{}).value)||0;
+  var tmplItem={id:newId,label:name,amount:srcamt,recurring:srcType==='salary',note:''};
+  if(srcType==='hourly')tmplItem.hourlyRate=hrate;
+  if(srcType==='freelance')tmplItem.isFreelance=true;
+  if(srcType==='commission')tmplItem.isCommission=true;
+  if(srcType==='variable')tmplItem.isVariable=true;
+  S.data.template.income.push(tmplItem);
   var md=getMonth(S.month);
-  md.income.push({id:newId,label:name,budgeted:0,recurring:false,note:'',transactions:[]});
+  var mdItem={id:newId,label:name,budgeted:srcamt,recurring:srcType==='salary',note:'',transactions:[]};
+  if(srcType==='hourly')mdItem.hourlyRate=hrate;
+  if(srcType==='freelance')mdItem.isFreelance=true;
+  if(srcType==='commission')mdItem.isCommission=true;
+  if(srcType==='variable')mdItem.isVariable=true;
+  md.income.push(mdItem);
   save();
   if(S._returnToQuickAdd){
     var st=S._qaState||{};
@@ -1249,14 +1268,6 @@ function saveEditAcct(){
   save();closeModal();toast("Updated "+acct.label);
 }
 
-function saveEditSub(){
-  const m=S.modal;const sub=S.data.subscriptions[m.si];if(!sub)return;
-  sub.name=document.getElementById("es-name")?.value?.trim()||sub.name;
-  sub.amount=parseFloat(document.getElementById("es-amt")?.value)||sub.amount;
-  sub.category=document.getElementById("es-cat")?.value?.trim()||"";
-  sub.billDay=parseInt(document.getElementById("es-day")?.value)||0;
-  save();closeModal();toast("Updated "+sub.name);
-}
 
 async function obStep1Next(){
   if(document.activeElement)document.activeElement.blur();
@@ -1805,41 +1816,9 @@ function showInterestHelp(){
 
 // ===== VOICE INPUT =====
 
-function fireQuickButton(qi){
-  const qb=S.data.quickButtons[qi];if(!qb)return;
-  const md=cm();
-  const cat=findById(md.categories,qb.catId);
-  const item=cat?findById(cat.items,qb.itemId):null;
-  if(!item){toast("Item not found — edit your shortcuts");return}
-  if(!item.transactions)item.transactions=[];
-  const d=new Date();
-  item.transactions.push({id:uid(),date:(d.getMonth()+1)+"/"+d.getDate(),amount:qb.amount,note:qb.label,tags:["quick"],auto:false});
-  S.data.streakDate=new Date().toISOString().split('T')[0];
-  // Deposit income to account if selected  
-  if(m.qaType==="income"&&m.depositTo&&m.depositTo!=="none"&&m.depositTo!=="cash"){
-    var qbAcct=S.data.networth?.accounts?.find(function(a){return a.id===m.depositTo});
-    if(qbAcct){var qbCur=getNWBalance(qbAcct,S.month);qbAcct.balances[S.month]=qbCur+amt}
-  }
-  save();render();
-}
 
-function removeQuickButton(qi){
-  S.data.quickButtons.splice(qi,1);save();render();
-}
 
-function openQuickButtonModal(){
-  const md=cm();
-  S.modal={type:"newqb",selCat:null,selItem:null};render();
-}
 
-function saveQuickButton(){
-  const m=S.modal;
-  const label=document.getElementById("m-label").value.trim()||"Shortcut";
-  const amt=parseFloat(document.getElementById("m-inp").value)||0;
-  if(amt===0||!m.selCat||!m.selItem){toast("Fill in all fields");return}
-  S.data.quickButtons.push({id:uid(),label,amount:amt,catId:m.selCat,itemId:m.selItem});
-  save();closeModal();
-}
 
 // ===== QUICK ADD =====
 function openQuickAdd(){S._modalFresh=true;
@@ -1960,6 +1939,15 @@ function saveQuickAdd(){
   var noteEl=document.getElementById("m-note");
   var note=noteEl?noteEl.value.trim():(m._note||'');
   // Specialized income notes
+  if(m.type==="addtx"&&m.isIncome){
+    if(m.isFreelance&&m._jobName&&!note)note=m._jobName;
+    if(m.isCommission&&m._dealName&&!note)note=m._dealName;
+    if(m.hourlyRate>0){
+      var hrsEl=document.getElementById('m-hrs');
+      var hrs2=hrsEl?parseFloat(hrsEl.value):0;
+      if(hrs2>0){amt=round2(hrs2*m.hourlyRate);if(!note)note=hrs2+'hrs @ $'+m.hourlyRate+'/hr'}
+    }
+  }
   if(m.qaType==="income"&&m.selItem){
     var selIncSave=cm().income.find(function(i){return i.id===m.selItem});
     if(selIncSave){
@@ -2318,7 +2306,7 @@ function _render(){
             });
             if(groupTxThisMonth.length>5)h+=`<div style="font-size:11px;color:var(--t3);margin-top:4px">+ ${groupTxThisMonth.length-5} more</div>`;
           }
-          h+=`<button class="add" style="margin-top:8px" onclick="switchTab('group')">View all groups</button>`;
+          h+=`<button class="add" style="margin-top:8px" onclick="S.view='group';S.activeGroup=-1;render()">View all groups</button>`;
           h+=`</div>`;
         }
       }
@@ -3246,15 +3234,7 @@ var acctsAll=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=
 
     // ═══ SUBSCRIPTIONS ═══
     var subs=S.data.subscriptions||[];var subTotal=subs.reduce(function(s,x){return s+x.amount},0);
-    h+=settSec("subs","📅","Subscriptions",subs.length?fmt(subTotal)+'/mo':'None');
-    if(subs.length===0){h+=`<div style="font-size:13px;color:var(--t3);padding:8px 0">No subscriptions tracked</div>`}
-    subs.forEach(function(sub,si){
-      var dayLabel=sub.billDay?sub.billDay+(sub.billDay===1?'st':sub.billDay===2?'nd':sub.billDay===3?'rd':'th'):'';
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);cursor:pointer" onclick="S.modal={type:'editsub',si:${si}};render()"><div><div style="font-size:13px;font-weight:500">${esc(sub.name)}</div><div style="font-size:11px;color:var(--t3)">${esc(sub.category||'')}${dayLabel?' · '+dayLabel:''}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600">${fmt(sub.amount)}</span><button style="background:none;border:none;color:var(--t3);font-size:18px;padding:6px;min-width:36px;min-height:36px" onclick="event.stopPropagation();customConfirm('Remove '+S.data.subscriptions[${si}].name+'?',function(){S.data.subscriptions.splice(${si},1);save();render()})">×</button></div></div>`;
-    });
-    h+=`<button class="add" style="margin-top:8px" onclick="S.modal={type:'addsub'};render()">+ Add subscription</button>`;
-    if(subs.length>0)h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px;color:var(--t2);border-top:1px solid var(--bd);margin-top:8px"><span>Monthly total</span><b>${fmt(subTotal)}</b></div><div style="font-size:12px;color:var(--t3)">Annual: <b>${fmt(subTotal*12)}</b></div>`;
-    h+=`</div></div>`;
+    // Subscriptions removed — use Money Out recurring
 
     // ═══ NET WORTH ═══
     var nwAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
@@ -3370,6 +3350,7 @@ function renderSection(items,title,catId,em,isIncome){
 
   items.forEach(it=>{
     const tot=txTotal(it),p=pct(tot,it.budgeted),iov=tot>it.budgeted;
+    var isNonRecurringIncome=isIncome&&!it.recurring;
     const expKey=(catId||"inc")+"-"+it.id;
     const isExp=S.expanded[expKey];
     const txs=it.transactions||[];
@@ -3392,6 +3373,16 @@ function renderSection(items,title,catId,em,isIncome){
       } else {
         h+=`<span class="rec-badge">↻</span>`;
       }
+    }
+    // Non-recurring income: show type badge and [+ Add] button
+    if(isNonRecurringIncome){
+      var tBadge='';
+      if(it.hourlyRate>0)tBadge='<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(108,99,255,.1);color:var(--ac);margin-left:4px">hourly</span>';
+      else if(it.isFreelance)tBadge='<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(46,213,115,.1);color:var(--gn);margin-left:4px">milestone</span>';
+      else if(it.isCommission)tBadge='<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(219,181,110,.1);color:var(--or);margin-left:4px">commission</span>';
+      else if(it.isVariable)tBadge='<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,107,107,.1);color:var(--rd);margin-left:4px">variable</span>';
+      if(tBadge&&!em)h+=tBadge;
+      if(!em)h+='<button style="font-size:12px!important;padding:6px 12px!important;border-radius:8px!important;border:1.5px solid var(--bd)!important;background:transparent!important;color:var(--ac)!important;cursor:pointer;margin-left:4px;min-height:32px!important" onclick="event.stopPropagation();event.preventDefault();openTxModal(\''+it.id+'\',null,true)">+ Add</button>';
     }
     // Show remaining balance for debt items
     if(!em&&it._balance!==undefined&&it._balance>0){
@@ -3422,7 +3413,7 @@ function renderSection(items,title,catId,em,isIncome){
 
     if(em){
       h+=`<span class="bud" onclick="openEditItemModal('${it.id}',${catId?`'${catId}'`:'null'},${isIncome})">✎ ${fmt(it.budgeted)}</span>`;
-    } else {
+    } else if(!isNonRecurringIncome){
       h+=`<span class="bud" onclick="event.stopPropagation();event.preventDefault();editBudgetInline('${catId}','${it.id}',${isIncome},${it.budgeted})" style="cursor:pointer">/ ${fmt(it.budgeted)}</span>`;
     }
     h+=`</div></div>`;
@@ -3474,10 +3465,10 @@ function renderSection(items,title,catId,em,isIncome){
     h+=`</div>`;
   });
 
-  if(em){
-    if(isIncome)h+=`<button class="add" onclick="addItemToAll(null,{id:uid()})">+ Add income</button>`;
-    else h+=`<button class="add" onclick="addItemToAll('${catId}',{id:uid()})">+ Add item</button>`;
+  if(!isIncome){
+    h+=`<button class="add" onclick="addItemToAll('${catId}',{id:uid()})">+ Add item</button>`;
   }
+  if(isIncome)h+=`<button class="add" onclick="S.modal={type:'addincomesource'};S._modalFresh=true;render()">+ Add income source</button>`;
   h+=`</div></div>`;
   return h;
 }
@@ -3523,13 +3514,16 @@ function renderModal(){
     h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" value="${m._amt||''}" oninput="S.modal._amt=this.value" onkeydown="if(event.key==='Enter')saveTx()">
       <label>What's it for?</label><input id="m-note" maxlength="100" placeholder="e.g. Uber Eats, dinner with friends" value="${esc(m._note||'')}">
       <label>Tags (comma separated, optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work lunch" value="${esc(m._tags||'')}">`;
-    // Special inputs for hourly/freelance income items
+    // Special inputs for hourly/freelance/commission income items
     if(m.isIncome){
       var txInc2=findById(cm().income,m.itemId);
-      if(txInc2&&txInc2.isFreelance){
-        h+=`<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Client / job name</div><input id="m-jobname" maxlength="60" placeholder="e.g. Logo design for Acme" oninput="S.modal._jobName=this.value"></div>`;
+      if(m.isFreelance||(txInc2&&txInc2.isFreelance)){
+        h+=`<div style="margin-bottom:8px"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Client / job name</label><input id="m-jobname" maxlength="60" placeholder="e.g. Logo design for Acme" value="${esc(m._jobName||'')}" oninput="S.modal._jobName=this.value"></div>`;
       }
-      if(txInc2&&(txInc2.hourlyRate>0||(txInc2.label&&txInc2.label.toLowerCase().indexOf('hourly')!==-1))){
+      if(m.isCommission||(txInc2&&txInc2.isCommission)){
+        h+=`<div style="margin-bottom:8px"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Deal / source</label><input id="m-dealname" maxlength="60" placeholder="e.g. Acme Corp Q3 deal" value="${esc(m._dealName||'')}" oninput="S.modal._dealName=this.value"></div>`;
+      }
+      if(m.hourlyRate>0||(txInc2&&(txInc2.hourlyRate>0||(txInc2.label&&txInc2.label.toLowerCase().indexOf('hourly')!==-1)))){
         var hr2=txInc2.hourlyRate||0;
         h+=`<div style="display:flex;gap:8px;margin-bottom:8px"><div style="flex:1"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Hours worked</div><input id="m-hrs" type="number" inputmode="decimal" placeholder="0" oninput="var hrs=parseFloat(this.value)||0;var el=document.getElementById('m-inp');if(el){el.value=Math.round(hrs*${hr2}*100)/100;S.modal._amt=el.value}"></div></div>`;
         if(hr2>0)h+=`<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Rate: $${hr2}/hr</div>`;
@@ -3888,28 +3882,7 @@ function renderModal(){
       <label>Current balance</label><input id="m-inp" type="number" inputmode="decimal" value="${m.value}" onkeydown="if(event.key==='Enter')saveDebtBalance(${m.ci})">
       <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveDebtBalance(${m.ci})">Save</button></div>`;
   }
-  else if(m.type==="newqb"){
-    const md2=cm();
-    h+=`<h3>New shortcut</h3>
-      <label>Button label</label><input id="m-label" maxlength="50" placeholder="e.g. Train, Coffee, Lunch" maxlength="50">
-      <label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="e.g. 3" value="${m._amt||''}">
-      <div style="margin-top:4px"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px;display:block">Category</label><div class="qa-cats">`;
-    md2.categories.forEach(cat=>{
-      h+=`<button class="qa-cat ${m.selCat===cat.id?'on':''}" onclick="saveModalInputs();S.modal.selCat='${cat.id}';S.modal.selItem=null;render()">${esc(cat.name)}</button>`;
-    });
-    h+=`</div>`;
-    if(m.selCat){
-      const selCatObj=findById(md2.categories,m.selCat);
-      if(selCatObj){
-        h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px;display:block">Item</label><div class="qa-items">`;
-        selCatObj.items.forEach(it=>{
-          h+=`<button class="qa-item ${m.selItem===it.id?'on':''}" onclick="saveModalInputs();S.modal.selItem='${it.id}';render()">${esc(it.label)}</button>`;
-        });
-        h+=`</div></div>`;
-      }
-    }
-    h+=`<div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveQuickButton()">Save</button></div>`;
-  }
+
   else if(m.type==="closedwarn"){
     h+=`<h3>Month is closed</h3>
       <div style="font-size:13px;color:var(--t2);margin-bottom:12px;line-height:1.6">${monthLabel(S.month)} has been closed. To log a transaction you need to reopen it first.</div>
@@ -3936,36 +3909,30 @@ function renderModal(){
       <div class="mbs"><button class="cn" onclick="S.modal=S._savedModal||null;delete S._savedModal;render()">Cancel</button><button class="sv" onclick="finishAddCategory()">Add</button></div>`;
   }
   else if(m.type==="addincomesource"){
+    var srcType=m.srcType||'salary';
     h+=`<h3>New income source</h3>
-      <label>Source name</label><input id="m-newsrc" maxlength="50" placeholder="e.g. Freelance, Side gig, Bonus">
-      <div class="mbs"><button class="cn" onclick="cancelInline()">Cancel</button><button class="sv" onclick="saveNewSource()">Add</button></div>`;
+      <label>Source name</label><input id="m-newsrc" maxlength="50" placeholder="${srcType==='hourly'?'e.g. Part-time job':srcType==='freelance'?'e.g. Design work':srcType==='commission'?'e.g. Sales commission':'e.g. Day job'}" value="${esc(m._srcName||'')}">
+      <label>Type</label><div class="qa-cats">
+        <button class="qa-cat ${srcType==='salary'?'on':''}" onclick="S.modal.srcType='salary';S.modal._srcName=document.getElementById('m-newsrc')?.value||'';render()">Salary</button>
+        <button class="qa-cat ${srcType==='hourly'?'on':''}" onclick="S.modal.srcType='hourly';S.modal._srcName=document.getElementById('m-newsrc')?.value||'';render()">Hourly</button>
+        <button class="qa-cat ${srcType==='freelance'?'on':''}" onclick="S.modal.srcType='freelance';S.modal._srcName=document.getElementById('m-newsrc')?.value||'';render()">Milestone</button>
+        <button class="qa-cat ${srcType==='commission'?'on':''}" onclick="S.modal.srcType='commission';S.modal._srcName=document.getElementById('m-newsrc')?.value||'';render()">Commission</button>
+        <button class="qa-cat ${srcType==='variable'?'on':''}" onclick="S.modal.srcType='variable';S.modal._srcName=document.getElementById('m-newsrc')?.value||'';render()">Variable</button>
+      </div>`;
+    if(srcType==='hourly'){
+      h+=`<label>Hourly rate</label><input id="m-hrate" type="number" inputmode="decimal" placeholder="$/hr" value="${m._hrate||''}">`;
+    }
+    if(srcType==='salary'){
+      h+=`<label>Monthly amount</label><input id="m-srcamt" type="number" inputmode="decimal" placeholder="Monthly pay after tax" value="${m._srcamt||''}">`;
+    }
+    h+=`<div class="mbs"><button class="cn" onclick="cancelInline()">Cancel</button><button class="sv" onclick="saveNewSource()">Add</button></div>`;
   }
   else if(m.type==="addquickitem"){
     h+=`<h3>Add item</h3>
       <label>Item name</label><input id="m-newitem" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" placeholder="e.g. Groceries, Coffee">
       <div class="mbs"><button class="cn" onclick="cancelInline()">Cancel</button><button class="sv" onclick="saveQuickItem()">Add</button></div>`;
   }
-  else if(m.type==="addsub"){
-    const presets=[
-      {n:"Netflix",a:15.49,c:"Streaming"},{n:"Spotify",a:11.99,c:"Music"},
-      {n:"Apple iCloud",a:2.99,c:"Cloud"},{n:"YouTube Premium",a:13.99,c:"Streaming"},
-      {n:"Amazon Prime",a:14.99,c:"Shopping"},{n:"Disney+",a:13.99,c:"Streaming"},
-      {n:"Hulu",a:17.99,c:"Streaming"},{n:"HBO Max",a:15.99,c:"Streaming"},
-      {n:"ChatGPT Plus",a:20,c:"AI"},{n:"Claude Pro",a:20,c:"AI"},
-      {n:"Gym",a:0,c:"Fitness"},{n:"Phone plan",a:0,c:"Phone"},
-    ];
-    h+=`<h3>Add subscription</h3>`;
-    h+=`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">`;
-    presets.forEach(p2=>{
-      h+=`<button class="qa-cat" style="font-size:11px;padding:6px 10px" onclick="document.getElementById('sub-name').value='${p2.n}';document.getElementById('sub-amt').value='${p2.a}';document.getElementById('sub-cat').value='${p2.c}'">${p2.n}${p2.a?' $'+p2.a:''}</button>`;
-    });
-    h+=`</div>`;
-    h+=`<label>Name</label><input id="sub-name" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" placeholder="e.g. Netflix">
-      <label>Monthly cost</label><input id="sub-amt" class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="decimal" placeholder="e.g. 15.99">
-      <label>Category (optional)</label><input id="sub-cat" class="ob-input" style="text-align:left;margin:4px 0" maxlength="30" placeholder="e.g. Streaming, Fitness">
-      <label>Billing day (optional)</label><input id="sub-day" class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="numeric" min="1" max="31" placeholder="e.g. 15">
-      <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="addSubscription()">Add</button></div>`;
-  }
+
   else if(m.type==="closemonth"){
     const md4=cm();
     // Use txTotal - same as dashboard, counts actual logged amounts
@@ -4219,17 +4186,7 @@ function renderModal(){
       </div>
       <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button></div>`;
   }
-  else if(m.type==="editsub"){
-    const sub2=S.data.subscriptions[m.si];
-    if(sub2){
-      h+=`<h3>Edit subscription</h3>
-        <label>Name</label><input id="es-name" class="ob-input" style="text-align:left;margin:4px 0" maxlength="50" value="${esc(sub2.name)}">
-        <label>Monthly cost</label><input id="es-amt" class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="decimal" value="${sub2.amount}">
-        <label>Category</label><input id="es-cat" class="ob-input" style="text-align:left;margin:4px 0" maxlength="30" value="${esc(sub2.category||'')}">
-        <label>Billing day</label><input id="es-day" class="ob-input" style="text-align:left;margin:4px 0" type="number" min="1" max="31" value="${sub2.billDay||''}">
-        <div class="mbs"><button class="cn" onclick="closeModal()">Cancel</button><button class="sv" onclick="saveEditSub()">Save</button></div>`;
-    }
-  }
+
   else if(m.type==="edittx"){
     h+=`<h3>Edit transaction</h3>
       <label>Amount</label><input id="et-amt" class="ob-input" style="text-align:left;margin:4px 0" type="number" inputmode="decimal" value="${m._amt||''}">
@@ -4249,7 +4206,7 @@ function renderModal(){
 function openTxModal(itemId,catId,isIncome){
   const md=cm(),item=getItemFromMonth(md,itemId,catId);
   if(!item)return;
-  S.modal={type:"addtx",label:item.label,itemId,catId,isIncome,currentTotal:txTotal(item)};
+  S.modal={type:"addtx",label:item.label,itemId:itemId,catId:catId,isIncome:isIncome,currentTotal:txTotal(item),hourlyRate:item.hourlyRate||0,isFreelance:!!item.isFreelance,isCommission:!!item.isCommission,isVariable:!!item.isVariable};
   render();setTimeout(()=>{const i=document.getElementById("m-inp");if(i){i.focus();i.select()}},60);
 }
 
@@ -4260,6 +4217,15 @@ function saveTx(){
   var noteEl=document.getElementById("m-note");
   var note=noteEl?noteEl.value.trim():(m._note||'');
   // Specialized income notes
+  if(m.type==="addtx"&&m.isIncome){
+    if(m.isFreelance&&m._jobName&&!note)note=m._jobName;
+    if(m.isCommission&&m._dealName&&!note)note=m._dealName;
+    if(m.hourlyRate>0){
+      var hrsEl=document.getElementById('m-hrs');
+      var hrs2=hrsEl?parseFloat(hrsEl.value):0;
+      if(hrs2>0){amt=round2(hrs2*m.hourlyRate);if(!note)note=hrs2+'hrs @ $'+m.hourlyRate+'/hr'}
+    }
+  }
   if(m.qaType==="income"&&m.selItem){
     var selIncSave=cm().income.find(function(i){return i.id===m.selItem});
     if(selIncSave){
@@ -5001,9 +4967,9 @@ const CAT_SUGGESTIONS={"Rent / Housing":[{l:"Rent",r:true},{l:"Utilities",r:true
     h+=`<div style="font-size:12px;color:var(--t2);margin-bottom:10px">Where does your money live?</div>`;
     S.obAccounts.forEach(function(oa,oai){
       h+=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <input id="ob-acct-name-${oai}" maxlength="30" value="${esc(oa.label)}" placeholder="Account name" style="flex:1" oninput="S.obAccounts[${oai}].label=this.value">
+        <input maxlength="30" value="${esc(oa.label)}" placeholder="Account name" style="flex:1" oninput="S.obAccounts[${oai}].label=this.value">
         <div style="position:relative;flex:0 0 110px"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:12px">$</span>
-        <input id="ob-acct-bal-${oai}" type="number" inputmode="decimal" value="${oa.balance||''}" placeholder="Balance" style="padding-left:24px!important" oninput="S.obAccounts[${oai}].balance=parseFloat(this.value)||0"></div>
+        <input type="number" inputmode="decimal" value="${oa.balance||''}" placeholder="Balance" style="padding-left:24px!important" oninput="S.obAccounts[${oai}].balance=parseFloat(this.value)||0"></div>
         ${S.obAccounts.length>1?'<button style="color:var(--t3)!important;font-size:18px!important;min-height:32px!important;min-width:32px!important;padding:0!important" onclick="S.obAccounts.splice('+oai+',1);render()">×</button>':''}
       </div>`;
     });
