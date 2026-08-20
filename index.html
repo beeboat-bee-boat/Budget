@@ -2622,6 +2622,45 @@ function _render(){
     h+=`</div>`;
   }
 
+
+  else if(S.view==="accounts"){
+    // ═══ ACCOUNTS TAB ═══
+    h+=`<div class="cnt view-enter" style="padding-top:8px">`;
+    var acctsAll=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+    var acctAssets=acctsAll.reduce(function(s,a){return s+Math.max(0,getNWBalance(a,S.month))},0);
+    var acctDebt=(S.data.debts?.cards||[]).reduce(function(s,cd){return s+cd.balance},0);
+    var acctNW=acctAssets-acctDebt;
+    // Net worth header
+    h+=`<div style="text-align:center;padding:20px 16px">`;
+    h+=`<div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:1px">${acctTerm("Net Worth")}</div>`;
+    h+=`<div style="font-size:32px;font-weight:800;color:${acctNW>=0?'var(--gn)':'var(--rd)'};margin:4px 0">${fmt(acctNW)}</div>`;
+    h+=`<div style="font-size:13px;color:var(--t2)">${fmt(acctAssets)} in assets${acctDebt>0?' · '+fmt(acctDebt)+' in debt':''}</div>`;
+    h+=`</div>`;
+    // Bank accounts
+    h+=`<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;padding:0 16px;margin-bottom:8px">Bank Accounts</div>`;
+    if(acctsAll.length===0){
+      h+=`<div style="text-align:center;padding:30px 16px;color:var(--t3)"><div style="margin-bottom:10px">No accounts yet</div><button class="add" style="max-width:200px;margin:0 auto" onclick="S.modal={type:'nwnew'};render()">+ Add account</button></div>`;
+    } else {
+      var allAcctArr=S.data.networth?.accounts||[];
+      acctsAll.forEach(function(a){
+        var ai=allAcctArr.indexOf(a);
+        var bal=getNWBalance(a,S.month);
+        h+=`<div class="dash-card" onclick="S.modal={type:'editacct',ai:${ai}};render()"><div class="dc-l"><span class="dc-icon">${a.type==='liability'?'📉':'🏦'}</span><div><div style="font-size:15px;font-weight:600">${esc(a.label)}</div><div style="font-size:12px;color:var(--t3)">${a.type==='asset'?'Asset':'Liability'} · tap to edit</div></div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:${bal>=0?'var(--gn)':'var(--rd)'}">${fmt(bal)}</div><button style="font-size:11px!important;color:var(--ac)!important;min-height:auto!important;padding:2px 0!important;background:none!important;border:none!important" onclick="event.stopPropagation();S.modal={type:'nwhistory',ai:${ai}};render()">history</button></div></div>`;
+      });
+      h+=`<button class="add" style="margin:8px 16px" onclick="S.modal={type:'nwnew'};render()">+ Add account</button>`;
+    }
+    // Credit card debt summary
+    var acctCards=S.data.debts?.cards||[];
+    if(acctCards.length>0){
+      h+=`<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;padding:0 16px;margin:16px 0 8px">Credit Card Debt</div>`;
+      acctCards.forEach(function(cd){
+        var util=cd.limit>0?Math.round(cd.balance/cd.limit*100):0;
+        h+=`<div class="dash-card" onclick="switchTab('cards')"><div class="dc-l"><span class="dc-icon">💳</span><div><div style="font-size:15px;font-weight:600">${esc(cd.name)}</div><div style="font-size:12px;color:var(--t3)">${cd.limit>0?util+'% of '+fmt(cd.limit):'No limit set'}</div></div></div><span style="font-size:16px;font-weight:700;color:${cd.balance>0?'var(--rd)':'var(--gn)'}">${cd.balance>0?'-':''}${fmt(cd.balance)}</span></div>`;
+      });
+    }
+    h+=`</div>`;
+  }
+
   else if(S.view==="group"){
     h+=`<div class="cnt view-enter" style="padding-top:8px">`;
     const groups=S.data.groups||[];
