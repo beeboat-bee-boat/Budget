@@ -399,6 +399,16 @@ function ensureStructure(){
   if(d.groupMoney&&d.groupMoney.length>200)d.groupMoney=d.groupMoney.slice(-200);
   if(!d.goals.completed)d.goals.completed=[];
   if(!d.networth)d.networth={accounts:[]};
+  if(!d.networth.accounts)d.networth.accounts=[];
+  d.networth.accounts.forEach(function(a){
+    if(!a.id)a.id=uid();
+    if(!a.type)a.type='asset';
+    if(!a.balances){
+      a.balances={};
+      if(a.balance!==undefined){a.balances[mk()]=a.balance;delete a.balance}
+    }
+    if(!a.label)a.label='Account';
+  });
   if(!d.monthlyNotes)d.monthlyNotes={};
   if(!d.quickButtons)d.quickButtons=[];
   if(!d.streakDate)d.streakDate=null;
@@ -413,7 +423,7 @@ function ensureStructure(){
   // Clean phantom future months
   const curMoClean=mk();
   if(d.months){Object.keys(d.months).forEach(m=>{if(m>curMoClean)delete d.months[m]})}
-  if(!d.theme)d.theme='bee';
+  if(!d.theme)d.theme='midnight';
   if(!d._startMonth)d._startMonth=mk();
   if(!d.timezone)d.timezone=Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone||'';
   if(!d.subscriptions)d.subscriptions=[];
