@@ -427,6 +427,11 @@ function ensureStructure(){
   if(!d._startMonth)d._startMonth=mk();
   if(!d.timezone)d.timezone=Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone||'';
   if(!d.subscriptions)d.subscriptions=[];
+  // Tag hourly and freelance income items
+  (d.template?.income||[]).forEach(function(i){
+    if(i.label&&i.label.toLowerCase().indexOf('hourly')!==-1&&!i.hourlyRate)i.hourlyRate=0;
+    if(i.label&&(i.label.toLowerCase().indexOf('freelance')!==-1||i.label.toLowerCase().indexOf('gig')!==-1||i.label.toLowerCase().indexOf('contract')!==-1))i.isFreelance=true;
+  });
   if(!d.debts.cards)d.debts.cards=[];
   d.debts.cards.forEach(cd=>{if(!cd.payments)cd.payments=[];if(!cd.id)cd.id=uid()});
   // Ensure all months have proper structure
@@ -1919,7 +1924,10 @@ function logPayday(incId){
   var depTo=S.modal['_pdDep_'+incId]||'none';
   var d=new Date();
   // Always add as a new transaction
-  inc.transactions.push({id:uid(),date:(d.getMonth()+1)+'/'+d.getDate(),isoDate:d.toISOString().split('T')[0],amount:amt,note:'Payday',tags:[],auto:false,depositTo:depTo});
+  var hrsWorked=S.modal['_pdH_'+incId]?parseFloat(S.modal['_pdH_'+incId]):null;
+  var jobName=S.modal['_pdJ_'+incId]||'';
+  var txNote=hrsWorked?hrsWorked+'hrs @ $'+(inc.hourlyRate||0)+'/hr':jobName?jobName:'Payday';
+  inc.transactions.push({id:uid(),date:(d.getMonth()+1)+'/'+d.getDate(),isoDate:d.toISOString().split('T')[0],amount:amt,note:txNote,tags:jobName?['freelance']:[],auto:false,depositTo:depTo});
   // Auto-confirm recurring when total >= budgeted
   if(inc.recurring){
     var autoTx=inc.transactions.find(function(t){return t.auto});
@@ -1951,6 +1959,24 @@ function saveQuickAdd(){
   if(amt===0){toast("Enter an amount");return}
   var noteEl=document.getElementById("m-note");
   var note=noteEl?noteEl.value.trim():(m._note||'');
+  // Specialized income notes
+  if(m.qaType==="income"&&m.selItem){
+    var selIncSave=cm().income.find(function(i){return i.id===m.selItem});
+    if(selIncSave){
+      var isHourlySave=selIncSave.hourlyRate>0||(selIncSave.label&&selIncSave.label.toLowerCase().indexOf('hourly')!==-1);
+      var isFreelanceSave=selIncSave.isFreelance||(selIncSave.label&&(selIncSave.label.toLowerCase().indexOf('freelance')!==-1||selIncSave.label.toLowerCase().indexOf('gig')!==-1));
+      var isCommSave=selIncSave.label&&(selIncSave.label.toLowerCase().indexOf('commission')!==-1||selIncSave.label.toLowerCase().indexOf('comm')!==-1);
+      if(isHourlySave&&m._hours){
+        var hrs=parseFloat(m._hours)||0;
+        if(hrs>0){
+          amt=round2(hrs*(selIncSave.hourlyRate||0));
+          if(!note)note=hrs+'hrs @ $'+(selIncSave.hourlyRate||0)+'/hr';
+        }
+      }
+      if(isFreelanceSave&&m._jobName&&!note)note=m._jobName;
+      if(isCommSave&&m._dealName&&!note)note=m._dealName;
+    }
+  }
   var tagsEl=document.getElementById("m-tags");
   var tagsRaw=tagsEl?tagsEl.value.trim():'';
   const tags=tagsRaw?tagsRaw.split(",").map(t=>t.trim()).filter(Boolean):[];
@@ -2079,6 +2105,7 @@ function _render(){
       h+=`<div class="cnt view-enter" style="padding-top:8px">`;
       h+=`<button class="back-btn" onclick="S.budgetView='dash';S.edit=false;render()">‹ Budget</button>`;
       h+=`<div class="sec-in">`;
+      md.income.sort(function(a,b){return b.budgeted-a.budgeted});
       h+=renderSection(md.income,"Money In",null,em,true);
       h+=`</div></div>`;
 
@@ -2162,8 +2189,9 @@ function _render(){
       if(dashAccts.length>0||dashDebt>0){
         h+=`<div style="background:var(--c1);border-radius:var(--radius);padding:14px 16px;margin:8px 16px;border:1px solid var(--bd);box-shadow:var(--sh);cursor:pointer" onclick="switchTab('accounts')">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:13px;font-weight:600">${acctTerm('Net Worth')}</span><span style="font-size:18px;font-weight:800;color:${dashNW>=0?'var(--gn)':'var(--rd)'}">${fmt(dashNW)}</span></div>
-          <div style="display:flex;gap:12px">`;
-        dashAccts.forEach(function(a){var b=getNWBalance(a,S.month);h+=`<div style="flex:1;text-align:center;padding:8px;background:var(--bg);border-radius:8px"><div style="font-size:10px;color:var(--t3)">${esc(a.label)}</div><div style="font-size:14px;font-weight:700;color:var(--gn)">${fmt(b)}</div></div>`});
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--t2)">Cash in accounts</span><span style="font-size:14px;font-weight:700;color:var(--gn)">${fmt(dashAssets)}</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">`;
+        dashAccts.sort(function(x,y){return getNWBalance(y,S.month)-getNWBalance(x,S.month)}).forEach(function(a){var b=getNWBalance(a,S.month);h+=`<div style="flex:1;min-width:70px;text-align:center;padding:8px;background:var(--bg);border-radius:8px"><div style="font-size:10px;color:var(--t3)">${esc(a.label)}</div><div style="font-size:13px;font-weight:600;color:var(--gn)">${fmt(b)}</div></div>`});
         h+=`</div>`;
         if(dashDebt>0){
           h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)">
@@ -2232,7 +2260,7 @@ function _render(){
           h+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">`;
           var unpaidCount=recurItems.filter(function(b){return!b.paid}).length;
           var paidCount=recurItems.filter(function(b){return b.paid}).length;
-          recurItems.forEach(function(b){
+          recurItems.sort(function(x,y){return y.amount-x.amount}).forEach(function(b){
             var col=b.paid?'var(--gn)':b.type==='income'?'var(--gn)':'var(--tx)';
             var amtCol=b.type==='income'?'color:var(--gn)':'color:var(--rd)';
             h+='<div class="bill-item" style="opacity:'+(b.paid?'0.5':'1')+'"><span>'+(b.paid?'\u2713 ':'')+getCatEmoji(b.cat)+' '+esc(b.label)+'</span><span style="font-weight:600;'+amtCol+'">'+(b.type==="income"?"+":"-")+fmt(b.amount)+'</span></div>';
@@ -2345,7 +2373,7 @@ function _render(){
   }
 
   else if(S.view==="cards"){
-    const cards=S.data.debts?.cards||[];
+    var cards=(S.data.debts?.cards||[]).slice().sort(function(a,b){return b.balance-a.balance});
     h+=`<div class="cnt" style="padding-top:8px">`;
     if(cards.length>0){
       // Aggregates
@@ -2636,7 +2664,7 @@ function _render(){
   else if(S.view==="accounts"){
     // ═══ ACCOUNTS TAB ═══
     h+=`<div class="cnt view-enter" style="padding-top:8px">`;
-    var acctsAll=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
+var acctsAll=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'}).sort(function(a,b){return getNWBalance(b,S.month)-getNWBalance(a,S.month)});
     var acctAssets=acctsAll.reduce(function(s,a){return s+Math.max(0,getNWBalance(a,S.month))},0);
     var acctDebt=(S.data.debts?.cards||[]).reduce(function(s,cd){return s+cd.balance},0);
     var acctNW=acctAssets-acctDebt;
@@ -2660,7 +2688,7 @@ function _render(){
       h+=`<button class="add" style="margin:8px 16px" onclick="S.modal={type:'nwnew'};render()">+ Add account</button>`;
     }
     // Credit card debt summary
-    var acctCards=S.data.debts?.cards||[];
+    var acctCards=(S.data.debts?.cards||[]).slice().sort(function(a,b){return b.balance-a.balance});
     if(acctCards.length>0){
       h+=`<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;padding:0 16px;margin:16px 0 8px">Credit Card Debt</div>`;
       acctCards.forEach(function(cd){
@@ -3495,6 +3523,18 @@ function renderModal(){
     h+=`<label>Amount</label><input id="m-inp" type="number" inputmode="decimal" placeholder="0" value="${m._amt||''}" oninput="S.modal._amt=this.value" onkeydown="if(event.key==='Enter')saveTx()">
       <label>What's it for?</label><input id="m-note" maxlength="100" placeholder="e.g. Uber Eats, dinner with friends" value="${esc(m._note||'')}">
       <label>Tags (comma separated, optional)</label><input id="m-tags" maxlength="100" placeholder="e.g. impulse, work lunch" value="${esc(m._tags||'')}">`;
+    // Special inputs for hourly/freelance income items
+    if(m.isIncome){
+      var txInc2=findById(cm().income,m.itemId);
+      if(txInc2&&txInc2.isFreelance){
+        h+=`<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Client / job name</div><input id="m-jobname" maxlength="60" placeholder="e.g. Logo design for Acme" oninput="S.modal._jobName=this.value"></div>`;
+      }
+      if(txInc2&&(txInc2.hourlyRate>0||(txInc2.label&&txInc2.label.toLowerCase().indexOf('hourly')!==-1))){
+        var hr2=txInc2.hourlyRate||0;
+        h+=`<div style="display:flex;gap:8px;margin-bottom:8px"><div style="flex:1"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Hours worked</div><input id="m-hrs" type="number" inputmode="decimal" placeholder="0" oninput="var hrs=parseFloat(this.value)||0;var el=document.getElementById('m-inp');if(el){el.value=Math.round(hrs*${hr2}*100)/100;S.modal._amt=el.value}"></div></div>`;
+        if(hr2>0)h+=`<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Rate: $${hr2}/hr</div>`;
+      }
+    }
     if(!m.isIncome){
       var txCards=S.data.debts?.cards||[];
       var txAccts=(S.data.networth?.accounts||[]).filter(function(a){return a.label!=='Unsorted'});
@@ -3667,6 +3707,29 @@ function renderModal(){
       // Always show + New source
       h+=`<button class="qa-cat" style="border-style:dashed;color:var(--ac)" onclick="addMiscIncome()">+ New source</button>`;
       h+=`</div>`;
+      // Specialized fields based on selected source
+      if(selItem){
+        var selInc=md2.income.find(function(i){return i.id===selItem});
+        if(selInc){
+          var isHourlyQA=selInc.hourlyRate>0||(selInc.label&&selInc.label.toLowerCase().indexOf('hourly')!==-1);
+          var isFreelanceQA=selInc.isFreelance||(selInc.label&&(selInc.label.toLowerCase().indexOf('freelance')!==-1||selInc.label.toLowerCase().indexOf('gig')!==-1||selInc.label.toLowerCase().indexOf('contract')!==-1));
+          var isCommQA=selInc.label&&(selInc.label.toLowerCase().indexOf('commission')!==-1||selInc.label.toLowerCase().indexOf('comm')!==-1);
+          if(isHourlyQA){
+            var hRateQA=selInc.hourlyRate||0;
+            h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)">`;
+            if(!hRateQA){
+              h+=`<div style="margin-bottom:6px"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Hourly rate</label><input id="qa-hrate" type="number" inputmode="decimal" placeholder="$/hr" style="font-size:14px!important;text-align:center!important;padding:8px!important" oninput="var v=parseFloat(this.value)||0;S.data.template.income.forEach(function(i){if(i.id==='${selInc.id}')i.hourlyRate=v});render()"></div>`;
+            }
+            h+=`<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Hours worked</label><input id="qa-hrs" type="number" inputmode="decimal" placeholder="0" value="${m._hours||''}" style="font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal._hours=this.value;var hrs=parseFloat(this.value)||0;var total=Math.round(hrs*${hRateQA}*100)/100;var el=document.getElementById('m-inp');if(el){el.value=total;S.modal._amt=String(total)}"></div><div style="flex:1"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">= Amount</label><div style="font-size:16px;font-weight:700;color:var(--gn);text-align:center;padding:12px">${m._hours?fmt(round2(parseFloat(m._hours)*(hRateQA))):'-'}</div></div></div>`;
+            if(hRateQA>0)h+=`<div style="font-size:11px;color:var(--t3);text-align:center;margin-top:4px">$${hRateQA}/hr</div>`;
+            h+=`</div>`;
+          } else if(isFreelanceQA){
+            h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Client / job name</label><input id="qa-job" maxlength="60" value="${esc(m._jobName||'')}" placeholder="e.g. Logo design for Acme" style="font-size:14px!important;padding:10px!important" oninput="S.modal._jobName=this.value"></div>`;
+          } else if(isCommQA){
+            h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Deal / source</label><input id="qa-deal" maxlength="60" value="${esc(m._dealName||'')}" placeholder="e.g. Acme Corp Q3 deal" style="font-size:14px!important;padding:10px!important" oninput="S.modal._dealName=this.value"></div>`;
+          }
+        }
+      }
       // Deposit to account
       const incAccts=(S.data.networth?.accounts||[]).filter(a=>a.label!=="Unsorted");
       const curAcct=m.depositTo||"none";
@@ -3735,10 +3798,31 @@ function renderModal(){
           }
           h+=`</div>`;
           if(!logged){
-            // Amount input (default to remaining amount)
             var pdKey='_pd_'+inc.id;
             var remaining=Math.max(0,inc.budgeted-actual);
-            h+=`<div style="display:flex;gap:8px;margin-bottom:8px"><input id="pd-amt-${inc.id}" type="number" inputmode="decimal" value="${m[pdKey]||remaining||''}" placeholder="Amount" style="flex:1;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${pdKey}']=this.value"></div>`;
+            var isHourly=inc.hourlyRate>0||(inc.label&&inc.label.toLowerCase().indexOf('hourly')!==-1);
+            if(isHourly){
+              var hRate=inc.hourlyRate||0;
+              var hKey='_pdH_'+inc.id;
+              var hVal=m[hKey]||'';
+              var calcAmt=hVal?round2(parseFloat(hVal)*(hRate||0)):0;
+              h+=`<div style="margin-bottom:8px">`;
+              if(!hRate||hRate===0){
+                h+=`<div style="display:flex;gap:8px;margin-bottom:6px"><div style="flex:1"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Hourly rate</div><input id="pd-rate-${inc.id}" type="number" inputmode="decimal" value="${hRate||''}" placeholder="$/hr" style="width:100%;font-size:14px!important;text-align:center!important;padding:8px!important" oninput="var v=parseFloat(this.value)||0;S.data.template.income.forEach(function(i){if(i.id==='${inc.id}')i.hourlyRate=v});inc.hourlyRate=v;render()"></div></div>`;
+              }
+              h+=`<div style="display:flex;gap:8px"><div style="flex:1"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Hours worked</div><input id="pd-hrs-${inc.id}" type="number" inputmode="decimal" value="${hVal}" placeholder="0" style="width:100%;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${hKey}']=this.value;var hrs=parseFloat(this.value)||0;var total=Math.round(hrs*${hRate}*100)/100;var amtEl=document.getElementById('pd-amt-${inc.id}');if(amtEl)amtEl.value=total;S.modal['${pdKey}']=total"></div><div style="flex:1"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">= Amount</div><input id="pd-amt-${inc.id}" type="number" inputmode="decimal" value="${calcAmt||remaining||''}" placeholder="$0" style="width:100%;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${pdKey}']=this.value"></div></div>`;
+              if(hRate>0)h+=`<div style="font-size:11px;color:var(--t3);margin-top:4px;text-align:center">$${hRate}/hr</div>`;
+              h+=`</div>`;
+            } else if(inc.isFreelance){
+              var jKey='_pdJ_'+inc.id;
+              var jName=m[jKey]||'';
+              h+=`<div style="margin-bottom:8px">`;
+              h+=`<div style="margin-bottom:6px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Client / job name</div><input id="pd-job-${inc.id}" maxlength="60" value="${esc(jName)}" placeholder="e.g. Logo design for Acme" style="width:100%;font-size:14px!important;padding:10px!important" oninput="S.modal['${jKey}']=this.value"></div>`;
+              h+=`<div><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Amount earned</div><input id="pd-amt-${inc.id}" type="number" inputmode="decimal" value="${m[pdKey]||''}" placeholder="$0" style="width:100%;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${pdKey}']=this.value"></div>`;
+              h+=`</div>`;
+            } else {
+              h+=`<div style="display:flex;gap:8px;margin-bottom:8px"><input id="pd-amt-${inc.id}" type="number" inputmode="decimal" value="${m[pdKey]||remaining||''}" placeholder="Amount" style="flex:1;font-size:16px!important;text-align:center!important;padding:10px!important" oninput="S.modal['${pdKey}']=this.value"></div>`;
+            }
             // Deposit to
             var pdDep=m['_pdDep_'+inc.id]||'';
             h+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:4px">Deposit to</div>`;
@@ -3748,7 +3832,8 @@ function renderModal(){
               h+=`<button class="qa-cat ${pdDep===a.id?'on':''}" style="font-size:12px;padding:6px 10px" onclick="S.modal['_pdDep_${inc.id}']='${a.id}';render()">${esc(a.label)}</button>`;
             });
             h+=`</div>`;
-            h+=`<button style="width:100%;margin-top:8px;padding:10px!important;background:rgba(46,213,115,.1)!important;border:1.5px solid rgba(46,213,115,.25)!important;color:var(--gn)!important;border-radius:10px!important;font-size:13px!important;font-weight:600" onclick="logPayday('${inc.id}')">Log ${esc(inc.label)}</button>`;
+            var logLabel=inc.isFreelance?'Log job':inc.hourlyRate>0?'Log hours':'Log '+esc(inc.label);
+            h+=`<button style="width:100%;margin-top:8px;padding:10px!important;background:rgba(46,213,115,.1)!important;border:1.5px solid rgba(46,213,115,.25)!important;color:var(--gn)!important;border-radius:10px!important;font-size:13px!important;font-weight:600" onclick="logPayday('${inc.id}')">${logLabel}</button>`;
           }
           h+=`</div>`;
         });
@@ -4174,6 +4259,24 @@ function saveTx(){
   if(amt===0){closeModal();return}
   var noteEl=document.getElementById("m-note");
   var note=noteEl?noteEl.value.trim():(m._note||'');
+  // Specialized income notes
+  if(m.qaType==="income"&&m.selItem){
+    var selIncSave=cm().income.find(function(i){return i.id===m.selItem});
+    if(selIncSave){
+      var isHourlySave=selIncSave.hourlyRate>0||(selIncSave.label&&selIncSave.label.toLowerCase().indexOf('hourly')!==-1);
+      var isFreelanceSave=selIncSave.isFreelance||(selIncSave.label&&(selIncSave.label.toLowerCase().indexOf('freelance')!==-1||selIncSave.label.toLowerCase().indexOf('gig')!==-1));
+      var isCommSave=selIncSave.label&&(selIncSave.label.toLowerCase().indexOf('commission')!==-1||selIncSave.label.toLowerCase().indexOf('comm')!==-1);
+      if(isHourlySave&&m._hours){
+        var hrs=parseFloat(m._hours)||0;
+        if(hrs>0){
+          amt=round2(hrs*(selIncSave.hourlyRate||0));
+          if(!note)note=hrs+'hrs @ $'+(selIncSave.hourlyRate||0)+'/hr';
+        }
+      }
+      if(isFreelanceSave&&m._jobName&&!note)note=m._jobName;
+      if(isCommSave&&m._dealName&&!note)note=m._dealName;
+    }
+  }
   var tagsEl=document.getElementById("m-tags");
   var tagsRaw=tagsEl?tagsEl.value.trim():'';
   const tags=tagsRaw?tagsRaw.split(",").map(t=>t.trim()).filter(Boolean):[];
